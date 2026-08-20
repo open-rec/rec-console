@@ -1,0 +1,28 @@
+services:
+  rec-console:
+    build:
+      context: .
+    image: openrec/rec-console:latest
+    container_name: rec-console
+    hostname: rec-console
+    restart: unless-stopped
+    environment:
+      ES_HOST: https://elasticsearch:9200
+      ES_USER: elastic
+      ES_PASSWORD: ${ELASTIC_PASSWORD:-openrec-es-password}
+      ES_VERIFY_CERTS: "false"
+    ports:
+      - "8095:8095"
+    networks:
+      - openrec-bigdata
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8095/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+networks:
+  openrec-bigdata:
+    external: true
+    name: openrec-bigdata
