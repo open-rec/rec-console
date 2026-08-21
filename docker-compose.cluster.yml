@@ -18,6 +18,8 @@ services:
       DAG_CONFIG_DIR: /opt/openrec/dag-config
       REC_SERVER_URL: http://rec-server:13579
       SERVING_GRAPH_TOKEN: ${SERVING_GRAPH_TOKEN:-openrec-serving-graph-token-change-me}
+      RANK_ENGINE_URL: http://rank-engine:8123
+      MODEL_ARTIFACT_ROOT: /models/releases
     ports:
       - "8095:8095"
     networks:
@@ -26,6 +28,7 @@ services:
       - rec-console-data:/var/lib/rec-console
       - openrec-dag-config:/opt/openrec/dag-config
       - openrec-airflow-logs:/opt/airflow-logs:ro
+      - openrec-model-artifacts:/models:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8095/health', timeout=5)"]
       interval: 10s
@@ -46,3 +49,5 @@ volumes:
   openrec-airflow-logs:
     external: true
     name: openrec-airflow-logs
+  openrec-model-artifacts:
+    name: openrec-model-artifacts

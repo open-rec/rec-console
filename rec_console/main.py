@@ -15,6 +15,7 @@ from rec_console.airflow_client import AirflowClient, AirflowError
 from rec_console.dag_configs import DagConfigStore
 from rec_console.entity_queries import EntityQueryClient, EntityQueryError
 from rec_console.recall_indexes import RecallIndexManager
+from rec_console.model_releases import ModelReleaseStore
 from rec_console.serving_graphs import RecServerError, ServingGraphStore
 
 
@@ -80,6 +81,16 @@ class ServingGraphPublishRequest(BaseModel):
     graph: dict
 
 
+class ModelPublishRequest(BaseModel):
+    scene: str
+    version: str
+
+
+class ModelRollbackRequest(BaseModel):
+    scene: str
+    target_version: str | None = None
+
+
 def _call(method, *args):
     manager = _manager()
     try:
@@ -130,6 +141,31 @@ def switch_release(request: SwitchRequest):
 @app.get("/api/recall/releases/{algorithm}")
 def releases(algorithm: str):
     return _call("list_indexes", algorithm)
+
+
+@app.get("/api/models/releases/{scene}")
+def model_releases(scene: str):
+    return ModelReleaseStore().list(scene)
+
+
+@app.post("/api/models/releases/publish")
+def publish_model(request: ModelPublishRequest):
+    try:
+        return ModelReleaseStore().publish(request.scene, request.version)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/models/releases/rollback")
+def rollback_model(request: ModelRollbackRequest):
+    try:
+        return ModelReleaseStore().rollback(request.scene, request.target_version)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 def _entity_query(method, *args):

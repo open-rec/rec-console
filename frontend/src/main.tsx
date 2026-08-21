@@ -28,7 +28,7 @@ const modules = [
   ["离线任务 DAG", "已启用", "dag"],
   ["监控大盘", "已启用", "monitor"],
   ["Airflow 自动化", "已启用", "airflow"],
-  ["Rank Model", "规划中", "model"],
+  ["Rank Model", "已启用", "model"],
 ] as const;
 
 type EntityKind = "user" | "item" | "event";
@@ -416,13 +416,44 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+type ModelRelease = {version: string; created_at?: string;
+  metrics?: {auc?: number | null; samples?: number; feature_dim?: number};
+  gate?: {passed?: boolean; min_auc?: number}};
+type ModelReleaseSet = {scene: string; active_version: string | null; releases: ModelRelease[]};
+
+function ModelPage() {
+  const [scene, setScene] = useState("scene_0"); const [data, setData] = useState<ModelReleaseSet | null>(null);
+  const [busy, setBusy] = useState(""); const [error, setError] = useState(""); const [message, setMessage] = useState("");
+  const load = useCallback(async () => { setError(""); try { setData(await api<ModelReleaseSet>(`/api/models/releases/${encodeURIComponent(scene)}`)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "模型版本读取失败"); } }, [scene]);
+  useEffect(() => { void load(); }, [load]);
+  async function activate(version?: string) {
+    const rollback = !version;
+    if (!window.confirm(rollback ? "确认回滚到上一个评估通过的模型？" : `确认发布 ${version}？`)) return;
+    setBusy(version || "rollback"); setError(""); setMessage("");
+    try { const result = await api<ModelReleaseSet>(`/api/models/releases/${rollback ? "rollback" : "publish"}`,
+      {method: "POST", body: JSON.stringify(rollback ? {scene} : {scene, version})});
+      setMessage(`${rollback ? "回滚" : "发布"}成功：${result.active_version}`); setData(result); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "模型操作失败"); } finally { setBusy(""); }
+  }
+  return <main><header><div><p className="eyebrow">MODEL LIFECYCLE</p><h1>Rank Model</h1><p className="subtitle">训练评估产物、原子发布与保留版本回滚</p></div>
+    <div className="actions"><input value={scene} onChange={(event) => setScene(event.target.value)}/><button onClick={() => void load()}>↻ 刷新</button></div></header>
+    {error && <div className="notice error page-notice">{error}</div>}{message && <div className="notice success page-notice">{message}</div>}
+    <section className="graph-status"><div><span>ACTIVE VERSION</span><strong>{data?.active_version || "未发布"}</strong></div><div><span>SCENE</span><code>{scene}</code></div><div><span>RETAINED</span><strong>{data?.releases.length || 0}</strong></div></section>
+    <section className="panel model-releases"><div className="panel-title"><span>模型版本与评估指标</span><button disabled={!data?.active_version || !!busy} onClick={() => void activate()}>回滚上一版本</button></div>
+      <div className="model-release-list">{data?.releases.map((release) => { const active = release.version === data.active_version; return <article className={active ? "active" : ""} key={release.version}>
+        <div><code>{release.version}</code><small>{release.created_at ? new Date(release.created_at).toLocaleString() : "—"}</small></div><span>AUC <b>{release.metrics?.auc == null ? "N/A" : release.metrics.auc.toFixed(4)}</b></span><span>SAMPLES <b>{release.metrics?.samples ?? "—"}</b></span><span>DIM <b>{release.metrics?.feature_dim ?? "—"}</b></span>
+        <em className={release.gate?.passed ? "passed" : "failed"}>{release.gate?.passed ? "GATE PASSED" : "GATE FAILED"}</em><button disabled={active || !release.gate?.passed || !!busy} onClick={() => void activate(release.version)}>{active ? "当前在线" : "发布此版本"}</button>
+      </article>; })}{data?.releases.length === 0 && <div className="empty">运行 openrec_rank_model DAG 后将在此显示版本</div>}</div></section><footer>OpenRec Console · rank-engine model activation is atomic</footer></main>;
+}
+
 function shortDate(index: string) {
   const match = index.match(/-(\d{4})(\d{2})(\d{2})-(r\d+)$/);
   return match ? `${match[1]}-${match[2]}-${match[3]} · ${match[4]}` : index;
 }
 
 function App() {
-  const [page, setPage] = useState<"recall" | "dag" | "airflow" | "serving" | "entities" | "monitor">("recall");
+  const [page, setPage] = useState<"recall" | "dag" | "airflow" | "serving" | "entities" | "monitor" | "model">("recall");
   const [selected, setSelected] = useState<Algorithm>("hot");
   const [data, setData] = useState<Record<string, ReleaseSet>>({});
   const [loading, setLoading] = useState(true);
@@ -485,8 +516,7 @@ function App() {
         <nav>
           {modules.map(([name, state, key], index) => (
             <button className={page === key ? "nav-item active" : "nav-item"}
-              key={key} disabled={key === "model"}
-              onClick={() => setPage(key === "recall" || key === "entities" || key === "serving" || key === "airflow" || key === "monitor" ? key : "dag")}>
+              key={key} onClick={() => setPage(key === "dag" ? "dag" : key)}>
               <span className="nav-icon">{["⌁", "◎", "⌘", "↗", "◫", "⇢", "◇"][index]}</span>
               <span>{name}</span><small>{state}</small>
             </button>
@@ -495,7 +525,7 @@ function App() {
         <div className="sidebar-foot"><span className="pulse" /> Elasticsearch connected</div>
       </aside>
 
-      {page === "dag" ? <DagPage mode="offline" /> : page === "airflow" ? <DagPage mode="airflow" /> : page === "serving" ? <ServingGraphPage /> : page === "entities" ? <EntityQueryPage /> : page === "monitor" ? <MonitorPage /> : <main>
+      {page === "dag" ? <DagPage mode="offline" /> : page === "airflow" ? <DagPage mode="airflow" /> : page === "serving" ? <ServingGraphPage /> : page === "entities" ? <EntityQueryPage /> : page === "monitor" ? <MonitorPage /> : page === "model" ? <ModelPage /> : <main>
         <header>
           <div><p className="eyebrow">RECALL OPERATIONS</p><h1>召回索引管理</h1>
             <p className="subtitle">查看、切换并安全回滚在线召回版本</p></div>
