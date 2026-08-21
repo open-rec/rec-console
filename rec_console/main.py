@@ -1,14 +1,21 @@
 """HTTP API for OpenRec operational controls."""
 
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from elasticsearch import Elasticsearch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from rec_console.airflow_client import AirflowClient, AirflowError
+from rec_console.dag_configs import DagConfigStore
+from rec_console.entity_queries import EntityQueryClient, EntityQueryError
 from rec_console.recall_indexes import RecallIndexManager
+from rec_console.serving_graphs import RecServerError, ServingGraphStore
 
 
 def _manager():
@@ -48,6 +55,31 @@ class SwitchRequest(BaseModel):
     target_index: str
 
 
+class DagStateRequest(BaseModel):
+    is_paused: bool
+
+
+class DagTriggerRequest(BaseModel):
+    conf: dict = Field(default_factory=dict)
+
+
+class DailyRecallConfigRequest(BaseModel):
+    schedule: str
+    algorithms: list[str]
+    default_revision: str = "r001"
+    max_index_versions: int = 2
+    retries: int = 1
+    retry_delay_minutes: int = 5
+
+
+class ConfigRollbackRequest(BaseModel):
+    version: str | None = None
+
+
+class ServingGraphPublishRequest(BaseModel):
+    graph: dict
+
+
 def _call(method, *args):
     manager = _manager()
     try:
@@ -63,9 +95,13 @@ def health():
     manager = _manager()
     try:
         manager.client.info()
-        return {"status": "ok", "elasticsearch": "ready"}
+        AirflowClient().dags()
+        ServingGraphStore().client.current()
+        return {"status": "ok", "elasticsearch": "ready", "airflow": "ready",
+                "rec_server": "ready"}
     except Exception as error:
-        raise HTTPException(status_code=503, detail="Elasticsearch is unavailable") from error
+        raise HTTPException(status_code=503, detail="Console dependency is unavailable: %s" % error) \
+            from error
     finally:
         manager.client.close()
 
@@ -94,6 +130,165 @@ def switch_release(request: SwitchRequest):
 @app.get("/api/recall/releases/{algorithm}")
 def releases(algorithm: str):
     return _call("list_indexes", algorithm)
+
+
+def _entity_query(method, *args):
+    try:
+        result = getattr(EntityQueryClient(), method)(*args)
+    except EntityQueryError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="entity was not found")
+    return result
+
+
+@app.get("/api/entities/users/{user_id}")
+def query_user(user_id: str):
+    return _entity_query("user", user_id)
+
+
+@app.get("/api/entities/items/{item_id}")
+def query_item(item_id: str):
+    return _entity_query("item", item_id)
+
+
+@app.get("/api/entities/events")
+def query_events(user_id: str, scene: str, event_type: str):
+    return {"user_id": user_id, "scene": scene, "event_type": event_type,
+            "events": _entity_query("events", user_id, scene, event_type)}
+
+
+def _airflow(method, *args):
+    try:
+        return getattr(AirflowClient(), method)(*args)
+    except AirflowError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/api/airflow/dags")
+def airflow_dags():
+    return _airflow("dags")
+
+
+@app.get("/api/airflow/dags/{dag_id}")
+def airflow_dag(dag_id: str):
+    dag = _airflow("dag", dag_id)
+    tasks = _airflow("dag_tasks", dag_id)
+    config = DagConfigStore().current() if dag_id == "openrec_daily_recall" else None
+    return {"dag": dag, "tasks": tasks.get("tasks", []), "config": config}
+
+
+@app.patch("/api/airflow/dags/{dag_id}")
+def airflow_dag_state(dag_id: str, request: DagStateRequest):
+    return _airflow("update_dag", dag_id, request.is_paused)
+
+
+@app.post("/api/airflow/dags/{dag_id}/runs")
+def airflow_trigger(dag_id: str, request: DagTriggerRequest):
+    return _airflow("trigger", dag_id, request.conf)
+
+
+@app.get("/api/airflow/dags/{dag_id}/runs")
+def airflow_runs(dag_id: str, limit: int = 20):
+    return _airflow("runs", dag_id, min(max(limit, 1), 100))
+
+
+@app.get("/api/airflow/dags/{dag_id}/runs/{run_id}/tasks")
+def airflow_tasks(dag_id: str, run_id: str):
+    return _airflow("tasks", dag_id, run_id)
+
+
+@app.get("/api/airflow/dags/{dag_id}/runs/{run_id}/tasks/{task_id}/logs")
+def airflow_task_logs(dag_id: str, run_id: str, task_id: str, try_number: int = 1):
+    return _airflow("logs", dag_id, run_id, task_id, max(try_number, 1))
+
+
+@app.get("/api/dag-configs/openrec_daily_recall")
+def daily_recall_config():
+    return DagConfigStore().current()
+
+
+@app.post("/api/dag-configs/openrec_daily_recall/publish")
+def publish_daily_recall_config(request: DailyRecallConfigRequest):
+    try:
+        result = DagConfigStore().publish(request.model_dump())
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        AirflowClient().reparse("openrec_daily_recall")
+        result["airflow_reparse"] = "requested"
+    except AirflowError as error:
+        result["airflow_reparse"] = "pending"
+        result["warning"] = str(error)
+    return result
+
+
+@app.post("/api/dag-configs/openrec_daily_recall/rollback")
+def rollback_daily_recall_config(request: ConfigRollbackRequest):
+    try:
+        result = DagConfigStore().rollback(request.version)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        AirflowClient().reparse("openrec_daily_recall")
+        result["airflow_reparse"] = "requested"
+    except AirflowError as error:
+        result["airflow_reparse"] = "pending"
+        result["warning"] = str(error)
+    return result
+
+
+@app.get("/api/serving-graph")
+def serving_graph():
+    try:
+        return ServingGraphStore().current()
+    except RecServerError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/serving-graph/publish")
+def publish_serving_graph(request: ServingGraphPublishRequest):
+    try:
+        return ServingGraphStore().publish(request.graph)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (OSError, RecServerError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/serving-graph/rollback")
+def rollback_serving_graph(request: ConfigRollbackRequest):
+    try:
+        return ServingGraphStore().rollback(request.version)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (OSError, RecServerError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.api_route("/grafana/{path:path}", methods=["GET", "POST"])
+async def grafana_proxy(path: str, request: Request):
+    """Expose Grafana through the console origin so remote browsers never use loopback URLs."""
+    base = os.environ.get("GRAFANA_URL", "http://grafana:3000").rstrip("/")
+    query = ("?" + request.url.query) if request.url.query else ""
+    body = await request.body()
+    upstream = urllib.request.Request(
+        "%s/grafana/%s%s" % (base, path, query),
+        data=body or None,
+        method=request.method,
+        headers={"Accept": request.headers.get("accept", "*/*"),
+                 "Content-Type": request.headers.get("content-type", "application/json")},
+    )
+    try:
+        with urllib.request.urlopen(upstream, timeout=30) as result:
+            headers = {name: value for name, value in result.headers.items()
+                       if name.lower() in ("content-type", "cache-control", "location")}
+            return Response(result.read(), status_code=result.status, headers=headers)
+    except urllib.error.HTTPError as error:
+        return Response(error.read(), status_code=error.code,
+                        media_type=error.headers.get_content_type())
+    except urllib.error.URLError as error:
+        raise HTTPException(status_code=502, detail="Grafana is unavailable: %s" % error) from error
 
 
 STATIC_DIR = Path(__file__).parent / "static"

@@ -11,10 +11,21 @@ services:
       ES_USER: elastic
       ES_PASSWORD: ${ELASTIC_PASSWORD:-openrec-es-password}
       ES_VERIFY_CERTS: "false"
+      AIRFLOW_URL: http://airflow-api-server:8080
+      AIRFLOW_USERNAME: admin
+      AIRFLOW_PASSWORD_FILE: /opt/airflow-logs/simple_auth_manager_passwords.json.generated
+      GRAFANA_URL: http://grafana:3000
+      DAG_CONFIG_DIR: /opt/openrec/dag-config
+      REC_SERVER_URL: http://rec-server:13579
+      SERVING_GRAPH_TOKEN: ${SERVING_GRAPH_TOKEN:-openrec-serving-graph-token-change-me}
     ports:
       - "8095:8095"
     networks:
       - openrec-bigdata
+    volumes:
+      - rec-console-data:/var/lib/rec-console
+      - openrec-dag-config:/opt/openrec/dag-config
+      - openrec-airflow-logs:/opt/airflow-logs:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8095/health', timeout=5)"]
       interval: 10s
@@ -26,3 +37,12 @@ networks:
   openrec-bigdata:
     external: true
     name: openrec-bigdata
+
+volumes:
+  rec-console-data:
+  openrec-dag-config:
+    external: true
+    name: openrec-dag-config
+  openrec-airflow-logs:
+    external: true
+    name: openrec-airflow-logs
