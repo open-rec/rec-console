@@ -9,7 +9,7 @@ from pathlib import Path
 
 DEFAULT_DAILY_RECALL = {
     "schedule": "0 2 * * *",
-    "algorithms": ["hot", "new", "i2i"],
+    "algorithms": ["hot", "new", "i2i", "embedding"],
     "default_revision": "r001",
     "max_index_versions": 2,
     "retries": 1,
@@ -74,8 +74,9 @@ class DagConfigStore:
             raise ValueError("schedule must be a five-field cron expression")
         algorithms = result["algorithms"]
         if not algorithms or len(set(algorithms)) != len(algorithms) \
-                or any(item not in ("hot", "new", "i2i") for item in algorithms):
-            raise ValueError("algorithms must be a unique non-empty subset of hot, new and i2i")
+                or any(item not in ("hot", "new", "i2i", "embedding") for item in algorithms):
+            raise ValueError(
+                "algorithms must be a unique non-empty subset of hot, new, i2i and embedding")
         if not re.match(r"^r\d{3,}$", str(result["default_revision"])):
             raise ValueError("default_revision must look like r001")
         for field, minimum, maximum in (("max_index_versions", 2, 10), ("retries", 0, 10),

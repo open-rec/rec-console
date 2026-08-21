@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type Algorithm = "hot" | "new" | "i2i";
+type DailyAlgorithm = Algorithm | "embedding";
 type Release = { index: string; active: boolean; documents: number };
 type ReleaseSet = {
   algorithm: Algorithm;
@@ -12,10 +13,12 @@ type ReleaseSet = {
 };
 
 const algorithms: Algorithm[] = ["hot", "new", "i2i"];
-const labels: Record<Algorithm, string> = {
+const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "i2i", "embedding"];
+const labels: Record<DailyAlgorithm, string> = {
   hot: "热门召回",
   new: "新品召回",
   i2i: "I2I 召回",
+  embedding: "Embedding 召回",
 };
 
 const modules = [
@@ -214,12 +217,12 @@ type TaskInstance = { task_id: string; state: string; try_number?: number };
 type DagTask = { task_id: string; downstream_task_ids?: string[]; operator_name?: string; [key: string]: unknown };
 type DagDetail = { dag: AirflowDag & Record<string, unknown>; tasks: DagTask[]; config: unknown };
 type DagConfig = {
-  schedule: string; algorithms: Algorithm[]; default_revision: string;
+  schedule: string; algorithms: DailyAlgorithm[]; default_revision: string;
   max_index_versions: number; retries: number; retry_delay_minutes: number;
 };
 
 const defaultDagConfig: DagConfig = {
-  schedule: "0 2 * * *", algorithms: algorithms, default_revision: "r001",
+  schedule: "0 2 * * *", algorithms: dailyAlgorithms, default_revision: "r001",
   max_index_versions: 2, retries: 1, retry_delay_minutes: 5,
 };
 
@@ -301,7 +304,7 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "无法加载 Task 日志"); }
   }
 
-  function moveAlgorithm(algorithm: Algorithm, offset: number) {
+  function moveAlgorithm(algorithm: DailyAlgorithm, offset: number) {
     const items = [...config.algorithms]; const from = items.indexOf(algorithm); const to = from + offset;
     if (from < 0 || to < 0 || to >= items.length) return;
     [items[from], items[to]] = [items[to], items[from]]; setConfig({...config, algorithms: items});
@@ -388,7 +391,7 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
         <label>索引保留数 <input type="number" min="2" max="10" value={config.max_index_versions} onChange={(e) => setConfig({...config, max_index_versions: Number(e.target.value)})}/></label>
         <label>失败重试次数 <input type="number" min="0" max="10" value={config.retries} onChange={(e) => setConfig({...config, retries: Number(e.target.value)})}/></label>
         <label>重试间隔（分钟） <input type="number" min="1" max="60" value={config.retry_delay_minutes} onChange={(e) => setConfig({...config, retry_delay_minutes: Number(e.target.value)})}/></label>
-        <fieldset><legend>算法与依赖顺序</legend>{algorithms.map((algorithm) => <div className="algorithm-order" key={algorithm}><label className="check">
+        <fieldset><legend>算法与依赖顺序</legend>{dailyAlgorithms.map((algorithm) => <div className="algorithm-order" key={algorithm}><label className="check">
           <input type="checkbox" checked={config.algorithms.includes(algorithm)} onChange={(e) => setConfig({...config,
             algorithms: e.target.checked ? [...config.algorithms, algorithm] : config.algorithms.filter((item) => item !== algorithm)})}/>{labels[algorithm]}</label>
           {config.algorithms.includes(algorithm) && <span><button type="button" onClick={() => moveAlgorithm(algorithm, -1)}>↑</button><button type="button" onClick={() => moveAlgorithm(algorithm, 1)}>↓</button></span>}</div>)}</fieldset>
