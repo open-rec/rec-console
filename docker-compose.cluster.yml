@@ -19,6 +19,8 @@ services:
       REC_SERVER_URL: http://rec-server:13579
       SERVING_GRAPH_TOKEN: ${SERVING_GRAPH_TOKEN:-openrec-serving-graph-token-change-me}
       RANK_ENGINE_URL: http://rank-engine:8123
+      REC_ALGORITHM_URL: http://rec-algorithm-runner:8090
+      ANALYTICS_CACHE_SECONDS: ${ANALYTICS_CACHE_SECONDS:-300}
       MODEL_ARTIFACT_ROOT: /models/releases
     ports:
       - "8095:8095"

@@ -3,6 +3,7 @@
 import os
 import urllib.error
 import urllib.request
+from datetime import date
 from pathlib import Path
 
 from elasticsearch import Elasticsearch
@@ -12,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from rec_console.airflow_client import AirflowClient, AirflowError
+from rec_console.analytics import AnalyticsClient, AnalyticsError
 from rec_console.dag_configs import DagConfigStore
 from rec_console.entity_queries import EntityQueryClient, EntityQueryError
 from rec_console.recall_indexes import RecallIndexManager
@@ -89,6 +91,19 @@ class ModelPublishRequest(BaseModel):
 class ModelRollbackRequest(BaseModel):
     scene: str
     target_version: str | None = None
+
+
+@app.get("/api/analytics/business")
+def business_analytics(date_from: date, date_to: date, scene: str = "", refresh: bool = False):
+    if date_from > date_to:
+        raise HTTPException(status_code=400, detail="date_from must not be after date_to")
+    if (date_to - date_from).days > 366:
+        raise HTTPException(status_code=400, detail="date range must not exceed 366 days")
+    try:
+        return AnalyticsClient().query(date_from.isoformat(), date_to.isoformat(),
+                                       scene.strip(), refresh)
+    except AnalyticsError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 def _call(method, *args):

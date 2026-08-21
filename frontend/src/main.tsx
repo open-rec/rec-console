@@ -27,6 +27,7 @@ const modules = [
   ["Serving Graph", "已启用", "serving"],
   ["离线任务 DAG", "已启用", "dag"],
   ["监控大盘", "已启用", "monitor"],
+  ["数据分析", "已启用", "analytics"],
   ["Airflow 自动化", "已启用", "airflow"],
   ["Rank Model", "已启用", "model"],
 ] as const;
@@ -93,6 +94,65 @@ function MonitorPage() {
       <article><strong>Data Source</strong><span>Prometheus · 15 秒采集 · Grafana 10 秒刷新</span></article></section>
     <section className="panel monitor-panel"><iframe title="OpenRec rec-server API dashboard" src={grafanaUrl} /></section>
     <footer>OpenRec Console · Grafana dashboard backed by Prometheus metrics</footer></main>;
+}
+
+type BusinessSummary = {exposes: number; clicks: number; purchases: number; browsing_users: number;
+  click_users: number; purchase_users: number; active_items: number; gmv: number;
+  gmv_valid_orders: number; pv_ctr: number; uv_ctr: number; pv_cvr: number; uv_cvr: number};
+type DailyMetric = {dt: string; exposes: number; clicks: number; purchases: number;
+  active_items: number; gmv: number; pv_ctr: number; pv_cvr: number};
+type BusinessAnalytics = {date_from: string; date_to: string; scene: string | null;
+  summary: BusinessSummary; daily: DailyMetric[]; gmv_schema: string; cached: boolean};
+
+function isoDate(offset: number) {
+  const value = new Date(); value.setDate(value.getDate() + offset);
+  return value.toISOString().slice(0, 10);
+}
+
+function AnalysisPage() {
+  const [dateFrom, setDateFrom] = useState(isoDate(-6));
+  const [dateTo, setDateTo] = useState(isoDate(0));
+  const [scene, setScene] = useState("scene_0");
+  const [data, setData] = useState<BusinessAnalytics | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async (refresh = false) => {
+    setBusy(true); setError("");
+    try {
+      const params = new URLSearchParams({date_from: dateFrom, date_to: dateTo});
+      if (scene.trim()) params.set("scene", scene.trim());
+      if (refresh) params.set("refresh", "true");
+      setData(await api<BusinessAnalytics>(`/api/analytics/business?${params}`));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "分析任务失败"); }
+    finally { setBusy(false); }
+  }, [dateFrom, dateTo, scene]);
+
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const summary = data?.summary;
+  const percent = (value?: number) => `${((value || 0) * 100).toFixed(2)}%`;
+  const maximum = Math.max(1, ...(data?.daily || []).map((row) => row.exposes));
+  return <main><header><div><p className="eyebrow">BUSINESS ANALYTICS</p><h1>数据分析大盘</h1>
+    <p className="subtitle">基于 Hive 行为明细的流量、转化、商品活跃度与交易指标</p></div>
+    <button className="refresh" disabled={busy} onClick={() => void load(true)}>↻ 强制刷新</button></header>
+    <section className="panel analytics-filter"><label>开始日期<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)}/></label>
+      <label>结束日期<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)}/></label>
+      <label>Scene（留空为全部）<input value={scene} onChange={(event) => setScene(event.target.value)} placeholder="全部 scene"/></label>
+      <button className="primary" disabled={busy || !dateFrom || !dateTo} onClick={() => void load()}>{busy ? "Spark 聚合中…" : "查询"}</button></section>
+    {error && <div className="notice error page-notice">{error}</div>}
+    <section className="analytics-cards">
+      <article><span>PV_CTR</span><strong>{summary ? percent(summary.pv_ctr) : "—"}</strong><small>{summary ? `${summary.clicks.toLocaleString()} 点击 / ${summary.exposes.toLocaleString()} 曝光` : "总点击数 / 总曝光数"}</small></article>
+      <article><span>UV_CTR</span><strong>{summary ? percent(summary.uv_ctr) : "—"}</strong><small>{summary ? `${summary.click_users.toLocaleString()} 点击用户 / ${summary.browsing_users.toLocaleString()} 浏览用户` : "点击用户 / 浏览用户"}</small></article>
+      <article><span>PV_CVR</span><strong>{summary ? percent(summary.pv_cvr) : "—"}</strong><small>{summary ? `${summary.purchases.toLocaleString()} 购买 / ${summary.clicks.toLocaleString()} 点击` : "购买次数 / 点击次数"}</small></article>
+      <article><span>UV_CVR</span><strong>{summary ? percent(summary.uv_cvr) : "—"}</strong><small>{summary ? `${summary.purchase_users.toLocaleString()} 购买用户 / ${summary.click_users.toLocaleString()} 点击用户` : "购买用户 / 点击用户"}</small></article>
+      <article><span>活跃 ITEM</span><strong>{summary ? summary.active_items.toLocaleString() : "—"}</strong><small>统计范围内产生过行为的去重商品数</small></article>
+      <article className="gmv"><span>GMV</span><strong>{summary ? summary.gmv.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : "—"}</strong><small>{summary ? `${summary.gmv_valid_orders.toLocaleString()} 笔购买事件含有效数量和价格` : "购买数量 × 购买价格"}</small></article>
+    </section>
+    <section className="panel analytics-trend"><div className="panel-title"><span>每日曝光与点击趋势</span><small>{data ? `${data.date_from} → ${data.date_to} · ${data.cached ? "缓存结果" : "实时 Spark 聚合"}` : "等待数据"}</small></div>
+      <div className="trend-list">{(data?.daily || []).map((row) => <div className="trend-row" key={row.dt}><code>{row.dt}</code><div className="trend-bars"><i style={{width: `${row.exposes / maximum * 100}%`}}/><b style={{width: `${row.clicks / maximum * 100}%`}}/></div><span>{row.exposes.toLocaleString()} PV</span><strong>{percent(row.pv_ctr)}</strong></div>)}
+        {data?.daily.length === 0 && <div className="empty">该范围内没有行为数据</div>}</div>
+      <div className="trend-legend"><span><i/>曝光</span><span><b/>点击</span><em>GMV 口径：buy.extFields.quantity × buy.extFields.price；缺失字段不计入 GMV</em></div></section>
+    <footer>OpenRec Console · cumulative business metrics from Hive ODS events</footer></main>;
 }
 
 function graphLayout(graph: ServingGraph) {
@@ -453,7 +513,7 @@ function shortDate(index: string) {
 }
 
 function App() {
-  const [page, setPage] = useState<"recall" | "dag" | "airflow" | "serving" | "entities" | "monitor" | "model">("recall");
+  const [page, setPage] = useState<"recall" | "dag" | "airflow" | "serving" | "entities" | "monitor" | "analytics" | "model">("recall");
   const [selected, setSelected] = useState<Algorithm>("hot");
   const [data, setData] = useState<Record<string, ReleaseSet>>({});
   const [loading, setLoading] = useState(true);
@@ -517,7 +577,7 @@ function App() {
           {modules.map(([name, state, key], index) => (
             <button className={page === key ? "nav-item active" : "nav-item"}
               key={key} onClick={() => setPage(key === "dag" ? "dag" : key)}>
-              <span className="nav-icon">{["⌁", "◎", "⌘", "↗", "◫", "⇢", "◇"][index]}</span>
+              <span className="nav-icon">{["⌁", "◎", "⌘", "↗", "◫", "▥", "⇢", "◇"][index]}</span>
               <span>{name}</span><small>{state}</small>
             </button>
           ))}
@@ -525,7 +585,7 @@ function App() {
         <div className="sidebar-foot"><span className="pulse" /> Elasticsearch connected</div>
       </aside>
 
-      {page === "dag" ? <DagPage mode="offline" /> : page === "airflow" ? <DagPage mode="airflow" /> : page === "serving" ? <ServingGraphPage /> : page === "entities" ? <EntityQueryPage /> : page === "monitor" ? <MonitorPage /> : page === "model" ? <ModelPage /> : <main>
+      {page === "dag" ? <DagPage mode="offline" /> : page === "airflow" ? <DagPage mode="airflow" /> : page === "serving" ? <ServingGraphPage /> : page === "entities" ? <EntityQueryPage /> : page === "monitor" ? <MonitorPage /> : page === "analytics" ? <AnalysisPage /> : page === "model" ? <ModelPage /> : <main>
         <header>
           <div><p className="eyebrow">RECALL OPERATIONS</p><h1>召回索引管理</h1>
             <p className="subtitle">查看、切换并安全回滚在线召回版本</p></div>

@@ -43,6 +43,8 @@ GET  /api/models/releases/{scene}
 POST /api/models/releases/publish
 POST /api/models/releases/rollback
 
+GET  /api/analytics/business?date_from=...&date_to=...&scene=...
+
 GET  /api/entities/users/{user_id}
 GET  /api/entities/items/{item_id}
 GET  /api/entities/events?user_id=...&scene=...&event_type=...
@@ -71,3 +73,9 @@ The Rank Model module lists evaluated immutable releases and their AUC, sample c
 dimension, and gate result. Publish asks rank-engine to load the complete artifact before updating
 the console's active record; rollback uses the same atomic activation path and retains activation
 history under the console data volume.
+
+The Data Analysis module submits a four-core Spark aggregation over the selected Hive event
+partitions and caches identical queries for five minutes. It reports PV/UV CTR, PV/UV CVR, active
+items, GMV, their underlying counts, and a daily trend. GMV requires `buy.extFields.quantity` and
+`buy.extFields.price`; malformed or missing values contribute zero and are excluded from the
+displayed valid-GMV-order count. Date ranges are limited to 366 days.
