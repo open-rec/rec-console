@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from rec_console.airflow_client import AirflowClient, AirflowError
 from rec_console.analytics import AnalyticsClient, AnalyticsError
+from rec_console.config import console_config
 from rec_console.dag_configs import DagConfigStore
 from rec_console.entity_queries import EntityQueryClient, EntityQueryError
 from rec_console.recall_indexes import RecallIndexManager
@@ -33,6 +34,36 @@ def _manager():
 
 
 app = FastAPI(title="OpenRec Console", version="0.1.0")
+
+
+FEATURE_PATHS = {
+    "/api/recall/": "recall",
+    "/api/entities/": "entities",
+    "/api/serving-graph": "serving",
+    "/api/dag-configs/": "dag",
+    "/api/airflow/": "airflow",
+    "/api/analytics/": "analytics",
+    "/api/models/": "model",
+    "/grafana/": "monitor",
+}
+
+
+@app.middleware("http")
+async def reject_disabled_features(request: Request, call_next):
+    features = console_config()["features"]
+    for prefix, feature in FEATURE_PATHS.items():
+        if request.url.path.startswith(prefix) and not features[feature]:
+            return Response(
+                content='{"detail":"feature is only supported in cluster mode"}',
+                status_code=404,
+                media_type="application/json",
+            )
+    return await call_next(request)
+
+
+@app.get("/api/config")
+def config():
+    return console_config()
 
 
 class PrepareRequest(BaseModel):
@@ -118,18 +149,26 @@ def _call(method, *args):
 
 @app.get("/health")
 def health():
-    manager = _manager()
+    config = console_config()
+    manager = _manager() if config["features"]["recall"] else None
     try:
-        manager.client.info()
-        AirflowClient().dags()
+        if manager:
+            manager.client.info()
+        if config["features"]["airflow"]:
+            AirflowClient().dags()
         ServingGraphStore().client.current()
-        return {"status": "ok", "elasticsearch": "ready", "airflow": "ready",
-                "rec_server": "ready"}
+        dependencies = {"rec_server": "ready"}
+        if manager:
+            dependencies["elasticsearch"] = "ready"
+        if config["features"]["airflow"]:
+            dependencies["airflow"] = "ready"
+        return {"status": "ok", "mode": config["mode"], **dependencies}
     except Exception as error:
         raise HTTPException(status_code=503, detail="Console dependency is unavailable: %s" % error) \
             from error
     finally:
-        manager.client.close()
+        if manager:
+            manager.client.close()
 
 
 @app.post("/api/recall/releases/prepare")

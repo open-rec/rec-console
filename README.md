@@ -56,8 +56,20 @@ Build and run the complete console on the `openrec-bigdata` network:
 docker compose -f docker-compose.cluster.yml up -d --build --wait
 ```
 
+For standalone mode, start the reduced console after monitoring and rec-server are running:
+
+```shell
+docker compose -f docker-compose.standalone.yml up -d --build --wait
+```
+
+`OPENREC_MODE=standalone` keeps monitoring, entity diagnostics, and Serving Graph enabled. Recall
+index management, offline DAG, data analysis, Airflow automation, and Rank Model remain visible as
+disabled cluster-only modules. The same capability checks protect their backend APIs. Entity
+diagnostics retain the shared online Redis query path through rec-server in both modes.
+
 The UI is exposed on `http://<host>:8095/`, API documentation is under `/docs`, and `/health`
-checks Elasticsearch, authenticated Airflow API access, and the rec-server Serving Graph endpoint.
+checks the dependencies enabled for the selected mode. Cluster checks Elasticsearch, authenticated
+Airflow API access, and rec-server; standalone checks rec-server only.
 This management port is reachable from the host network;
 restrict it with the deployment firewall until console authentication is introduced.
 

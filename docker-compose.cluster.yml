@@ -7,6 +7,7 @@ services:
     hostname: rec-console
     restart: unless-stopped
     environment:
+      OPENREC_MODE: cluster
       ES_HOST: https://elasticsearch:9200
       ES_USER: elastic
       ES_PASSWORD: ${ELASTIC_PASSWORD:-openrec-es-password}

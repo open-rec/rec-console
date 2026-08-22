@@ -5,7 +5,7 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button { font: inherit; }
 .shell { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
-.sidebar { background: #111514; color: #f6f3e9; padding: 32px 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.sidebar { z-index: 10; background: #111514; color: #f6f3e9; padding: 32px 20px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
 .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; color: #111514; background: #dfff50; border-radius: 11px; font-weight: 800; }
 .eyebrow { margin: 34px 10px 12px; color: #8b928e; font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 1.8px; }
@@ -13,6 +13,11 @@ nav { display: flex; flex-direction: column; gap: 5px; }
 .nav-item { width: 100%; min-height: 48px; border: 0; border-radius: 9px; padding: 0 12px; color: #737b77; background: transparent; display: grid; grid-template-columns: 26px 1fr auto; align-items: center; text-align: left; cursor: default; }
 .nav-item.active { color: #f7f5ed; background: #242927; box-shadow: inset 2px 0 #dfff50; }
 .nav-item small { font-size: 9px; padding: 3px 6px; border: 1px solid #353b38; border-radius: 10px; }
+.nav-item.disabled { position: relative; color: #777d79; cursor: not-allowed; }
+.nav-item.disabled:hover, .nav-item.disabled:focus-visible { z-index: 30; background: transparent; }
+.nav-item.disabled small { color: #d18a7f; }
+.nav-tooltip { position: absolute; z-index: 40; left: calc(100% + 10px); top: 50%; width: max-content; max-width: 220px; padding: 8px 10px; border: 1px solid #3c423f; border-radius: 7px; color: #f7f5ed; background: #202523; box-shadow: 0 6px 18px #1115144d; font: 10px "DM Mono", monospace; line-height: 1.4; opacity: 0; visibility: hidden; pointer-events: none; transform: translate(4px, -50%); transition: opacity .15s, transform .15s, visibility .15s; }
+.nav-item.disabled:hover .nav-tooltip, .nav-item.disabled:focus-visible .nav-tooltip { opacity: 1; visibility: visible; transform: translate(0, -50%); }
 .nav-icon { font-size: 17px; color: #aab0ad; }
 .sidebar-foot { margin-top: auto; padding: 16px 10px 0; border-top: 1px solid #292e2c; color: #8f9793; font: 10px "DM Mono", monospace; }
 .pulse { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #9fe46b; box-shadow: 0 0 0 4px #253526; }

@@ -21,15 +21,18 @@ const labels: Record<DailyAlgorithm, string> = {
   embedding: "Embedding 召回",
 };
 
-const modules = [
-  ["召回索引", "已启用", "recall"],
-  ["实体排查", "已启用", "entities"],
-  ["Serving Graph", "已启用", "serving"],
-  ["离线任务 DAG", "已启用", "dag"],
-  ["监控大盘", "已启用", "monitor"],
-  ["数据分析", "已启用", "analytics"],
-  ["Airflow 自动化", "已启用", "airflow"],
-  ["Rank Model", "已启用", "model"],
+type ModuleKey = "recall" | "entities" | "serving" | "dag" | "monitor" | "analytics" | "airflow" | "model";
+type ConsoleConfig = {mode: "cluster" | "standalone"; features: Record<ModuleKey, boolean>};
+
+const modules: readonly (readonly [string, ModuleKey])[] = [
+  ["召回索引", "recall"],
+  ["实体排查", "entities"],
+  ["Serving Graph", "serving"],
+  ["离线任务 DAG", "dag"],
+  ["监控大盘", "monitor"],
+  ["数据分析", "analytics"],
+  ["Airflow 自动化", "airflow"],
+  ["Rank Model", "model"],
 ] as const;
 
 type EntityKind = "user" | "item" | "event";
@@ -513,7 +516,8 @@ function shortDate(index: string) {
 }
 
 function App() {
-  const [page, setPage] = useState<"recall" | "dag" | "airflow" | "serving" | "entities" | "monitor" | "analytics" | "model">("recall");
+  const [page, setPage] = useState<ModuleKey>("recall");
+  const [config, setConfig] = useState<ConsoleConfig | null>(null);
   const [selected, setSelected] = useState<Algorithm>("hot");
   const [data, setData] = useState<Record<string, ReleaseSet>>({});
   const [loading, setLoading] = useState(true);
@@ -522,6 +526,7 @@ function App() {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
+    if (!config?.features.recall) { setLoading(false); return; }
     setLoading(true);
     setError("");
     try {
@@ -534,9 +539,18 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [config]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void api<ConsoleConfig>("/api/config").then((value) => {
+      setConfig(value);
+      if (!value.features.recall) setPage("entities");
+    }).catch((reason) => {
+      setError(reason instanceof Error ? reason.message : "无法加载 Console 配置");
+      setLoading(false);
+    });
+  }, []);
 
   async function operate(action: "switch" | "rollback", target?: string) {
     const prompt = action === "rollback"
@@ -574,15 +588,18 @@ function App() {
         <div className="brand"><span className="brand-mark">O</span><span>OpenRec</span></div>
         <p className="eyebrow">CONTROL PLANE</p>
         <nav>
-          {modules.map(([name, state, key], index) => (
-            <button className={page === key ? "nav-item active" : "nav-item"}
-              key={key} onClick={() => setPage(key === "dag" ? "dag" : key)}>
+          {modules.map(([name, key], index) => {
+            const enabled = config?.features[key] !== false;
+            return <button className={`${page === key ? "nav-item active" : "nav-item"}${enabled ? "" : " disabled"}`}
+              key={key} aria-disabled={!enabled}
+              onClick={() => { if (enabled) setPage(key); }}>
               <span className="nav-icon">{["⌁", "◎", "⌘", "↗", "◫", "▥", "⇢", "◇"][index]}</span>
-              <span>{name}</span><small>{state}</small>
+              <span>{name}</span><small>{enabled ? "已启用" : "已禁用"}</small>
+              {!enabled && <span className="nav-tooltip" role="tooltip">此功能仅供cluster模式使用</span>}
             </button>
-          ))}
+          })}
         </nav>
-        <div className="sidebar-foot"><span className="pulse" /> Elasticsearch connected</div>
+        <div className="sidebar-foot"><span className="pulse" /> {config?.mode || "loading"} mode</div>
       </aside>
 
       {page === "dag" ? <DagPage mode="offline" /> : page === "airflow" ? <DagPage mode="airflow" /> : page === "serving" ? <ServingGraphPage /> : page === "entities" ? <EntityQueryPage /> : page === "monitor" ? <MonitorPage /> : page === "analytics" ? <AnalysisPage /> : page === "model" ? <ModelPage /> : <main>
