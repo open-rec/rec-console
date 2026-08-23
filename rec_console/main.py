@@ -108,10 +108,26 @@ class DailyRecallConfigRequest(BaseModel):
 
 class ConfigRollbackRequest(BaseModel):
     version: str | None = None
+    experiment: str = "default"
 
 
 class ServingGraphPublishRequest(BaseModel):
     graph: dict
+    experiment: str = "default"
+
+
+class ServingGraphRoutingRequest(BaseModel):
+    param: str = "ab"
+    defaultExperiment: str = "default"
+    routes: dict[str, str] = Field(default_factory=dict)
+
+
+class ServingGraphExperimentRequest(BaseModel):
+    name: str
+
+
+class ServingGraphExperimentStateRequest(BaseModel):
+    enabled: bool
 
 
 class ModelPublishRequest(BaseModel):
@@ -329,9 +345,9 @@ def rollback_daily_recall_config(request: ConfigRollbackRequest):
 
 
 @app.get("/api/serving-graph")
-def serving_graph():
+def serving_graph(experiment: str = "default"):
     try:
-        return ServingGraphStore().current()
+        return ServingGraphStore().current(experiment)
     except RecServerError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
@@ -339,7 +355,7 @@ def serving_graph():
 @app.post("/api/serving-graph/publish")
 def publish_serving_graph(request: ServingGraphPublishRequest):
     try:
-        return ServingGraphStore().publish(request.graph)
+        return ServingGraphStore().publish(request.graph, request.experiment)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RecServerError) as error:
@@ -349,10 +365,45 @@ def publish_serving_graph(request: ServingGraphPublishRequest):
 @app.post("/api/serving-graph/rollback")
 def rollback_serving_graph(request: ConfigRollbackRequest):
     try:
-        return ServingGraphStore().rollback(request.version)
+        return ServingGraphStore().rollback(request.version, getattr(request, "experiment", "default"))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RecServerError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.put("/api/serving-graph/routing")
+def configure_serving_graph_routing(request: ServingGraphRoutingRequest):
+    try:
+        return ServingGraphStore().client.configure_routing(request.model_dump())
+    except RecServerError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.post("/api/serving-graph/experiments")
+def create_serving_graph_experiment(request: ServingGraphExperimentRequest):
+    try:
+        return ServingGraphStore().client.create_experiment(request.name)
+    except RecServerError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.put("/api/serving-graph/experiments/{experiment}/enabled")
+def set_serving_graph_experiment_enabled(
+        experiment: str, request: ServingGraphExperimentStateRequest):
+    try:
+        return ServingGraphStore().set_experiment_enabled(experiment, request.enabled)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RecServerError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.delete("/api/serving-graph/experiments/{experiment}")
+def delete_serving_graph_experiment(experiment: str):
+    try:
+        return ServingGraphStore().client.delete_experiment(experiment)
+    except RecServerError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 

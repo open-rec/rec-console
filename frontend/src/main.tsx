@@ -199,19 +199,25 @@ function ServingGraphPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [experiment, setExperiment] = useState("default");
+  type ExperimentRuntime = {experiment: string; version: string; checksum?: string; loadedAt?: string; enabled: boolean};
+  const [experiments, setExperiments] = useState<Record<string, ExperimentRuntime>>({});
+  const [newExperiment, setNewExperiment] = useState("");
+  const experimentNameValid = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(newExperiment.trim());
   const graphViewport = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const result = await api<{version: string | null; checksum: string | null; graph: ServingGraph; history: GraphRelease[]}>("/api/serving-graph");
+      const result = await api<{version: string | null; checksum: string | null; graph: ServingGraph; history: GraphRelease[]; experiments?: Record<string, ExperimentRuntime>}>(`/api/serving-graph?experiment=${encodeURIComponent(experiment)}`);
       setGraph(result.graph); setVersion(result.version); setChecksum(result.checksum); setHistory(result.history || []);
+      if (result.experiments) setExperiments(result.experiments);
       const name = selected || result.graph.nodes[0]?.name || ""; setSelected(name);
       const node = result.graph.nodes.find((item) => item.name === name);
       setContent(JSON.stringify(node?.content ?? {}, null, 2));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "无法读取在线 Serving Graph"); }
-  }, []);
-  useEffect(() => { void load(); }, []);
+  }, [experiment]);
+  useEffect(() => { void load(); }, [load]);
 
   const node = graph?.nodes.find((item) => item.name === selected);
   const layout = graph ? graphLayout(graph) : null;
@@ -234,21 +240,66 @@ function ServingGraphPage() {
     try { updateNode({content: JSON.parse(content)}); setMessage(`${selected} 节点配置已暂存`); setError(""); }
     catch (reason) { setError(`节点 content 不是合法 JSON：${reason}`); }
   }
+  function selectOperationRule(operationName: string) {
+    try {
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      const next: Record<string, unknown> = {...parsed, operationName};
+      if (operationName === "SlidingWindowDiversityOperationRule") next.channelRatios = {};
+      if (operationName === "WeightedChannelOperationRule") next.diversityDimensions = [];
+      setContent(JSON.stringify(next, null, 2));
+      updateNode({content: next});
+      setMessage(`operation 策略已切换为 ${operationName}`); setError("");
+    } catch (reason) { setError(`节点 content 不是合法 JSON：${reason}`); }
+  }
   async function publish() {
     if (!graph || !window.confirm("确认将完整 Serving Graph 热更新到 rec-server？")) return;
     setBusy(true); setError(""); setMessage("");
     try {
       const parsed = JSON.parse(content); const assembled = {...graph, nodes: graph.nodes.map((item) => item.name === selected ? {...item, content: parsed} : item)};
-      const result = await api<{version: string}>("/api/serving-graph/publish", {method: "POST", body: JSON.stringify({graph: assembled})});
-      setMessage(`Serving Graph ${result.version} 已全局生效`); await load();
+      const result = await api<{version: string}>("/api/serving-graph/publish", {method: "POST", body: JSON.stringify({graph: assembled, experiment})});
+      setMessage(`Serving Graph ${result.version} 已发布到实验 ${experiment}${experiments[experiment]?.enabled ? "并生效" : "，启用后开始接收流量"}`); await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Serving Graph 发布失败"); }
     finally { setBusy(false); }
   }
   async function rollback(target: string) {
     if (!window.confirm(`确认回滚并重新激活 ${target}？`)) return;
     setBusy(true); setError("");
-    try { await api("/api/serving-graph/rollback", {method: "POST", body: JSON.stringify({version: target})}); setMessage(`已回滚到 ${target}`); await load(); }
+    try { await api("/api/serving-graph/rollback", {method: "POST", body: JSON.stringify({version: target, experiment})}); setMessage(`实验 ${experiment} 已回滚到 ${target}`); await load(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Serving Graph 回滚失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function createExperiment() {
+    const name = newExperiment.trim();
+    if (!name) return;
+    setBusy(true); setError("");
+    try {
+      await api("/api/serving-graph/experiments", {method: "POST", body: JSON.stringify({name})});
+      setNewExperiment(""); setExperiment(name);
+      setMessage(`实验 ${name} 已创建，发布 Serving Graph 后可启用流量`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "实验创建失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function setExperimentEnabled(name: string, enabled: boolean) {
+    setBusy(true); setError("");
+    try {
+      await api(`/api/serving-graph/experiments/${encodeURIComponent(name)}/enabled`, {
+        method: "PUT", body: JSON.stringify({enabled}),
+      });
+      setMessage(`实验 ${name} 已${enabled ? "启用" : "关闭"}`); await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "实验状态更新失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteExperiment(name: string) {
+    if (!window.confirm(`确认从 rec-server Runtime 中删除实验 ${name}？历史发布记录仍会保留。`)) return;
+    setBusy(true); setError("");
+    try {
+      await api(`/api/serving-graph/experiments/${encodeURIComponent(name)}`, {method: "DELETE"});
+      setMessage(`实验 ${name} 已从 Runtime 删除`);
+      if (experiment === name) setExperiment("default"); else await load();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "实验删除失败"); }
     finally { setBusy(false); }
   }
 
@@ -258,6 +309,14 @@ function ServingGraphPage() {
     {error && <div className="notice error page-notice">{error}</div>}{message && <div className="notice success page-notice">{message}</div>}
     <section className="graph-status"><div><span>ACTIVE VERSION</span><strong>{version || "classpath-default"}</strong></div>
       <div><span>CHECKSUM</span><code>{checksum?.slice(0, 16) || "—"}</code></div><div><span>NODES / EDGES</span><strong>{graph?.nodes.length || 0} / {graph?.edges.length || 0}</strong></div></section>
+    <section className="panel ab-config"><div className="panel-title"><span>AB 实验与路由</span><small>{Object.keys(experiments).length} 个 Runtime 实验 · 请求参数 params.ab</small></div>
+      <div className="experiment-create"><label><input placeholder="实验名，例如 test1 或 rank_v2" value={newExperiment} onChange={(event) => setNewExperiment(event.target.value)}/><small>字母开头，仅允许英文字母、数字和下划线，最长 64 位</small></label><button className="primary" disabled={busy || !experimentNameValid} onClick={() => void createExperiment()}>新增实验</button></div>
+      <div className="experiment-list">{Object.values(experiments).map((item) => <article key={item.experiment} className={experiment === item.experiment ? "selected" : ""}>
+        <button className="experiment-select" onClick={() => setExperiment(item.experiment)}><strong>{item.experiment}</strong><small>{item.version || "draft"}</small><i className={item.enabled ? "enabled" : "disabled"}>{item.enabled ? "已启用" : item.version === "draft" ? "待发布" : "已关闭"}</i></button>
+        {item.experiment !== "default" && <div><button disabled={busy || item.version === "draft"} title={item.version === "draft" ? "请先选择该实验并发布 Serving Graph" : ""} onClick={() => void setExperimentEnabled(item.experiment, !item.enabled)}>{item.enabled ? "关闭" : item.version === "draft" ? "请先发布" : "启用"}</button><button className="danger" disabled={busy} onClick={() => void deleteExperiment(item.experiment)}>删除</button></div>}
+      </article>)}</div>
+      <div className="experiment-routing-note"><label>当前编辑实验<select value={experiment} onChange={(event) => setExperiment(event.target.value)}>{Object.keys(experiments).map((name) => <option key={name} value={name}>{name}</option>)}</select></label><span>请求携带 <code>params.ab={experiment}</code> 将自动命中该实验；未启用时回退 default。</span></div></section>
+    {experiments[experiment]?.version === "draft" && <div className="notice page-notice">实验 {experiment} 当前是草稿。请完成下方 Serving Graph 配置并点击“发布实验 {experiment}”，发布成功后才能启用。</div>}
     <section className="serving-layout"><div className="panel graph-panel"><div className="panel-title"><span>在线推荐执行图</span><div className="graph-tools"><small>{Math.round(zoom * 100)}%</small><button onClick={() => setZoom(Math.max(.35, zoom - .1))}>−</button><button onClick={() => setZoom(Math.min(1.8, zoom + .1))}>＋</button><button onClick={() => setZoom(1)}>1:1</button><button onClick={fitGraph}>适应窗口</button></div></div>
       <div className="graph-scroll" ref={graphViewport}>{graph && layout && <div className="graph-scale" style={{width: layout.width * zoom, height: layout.height * zoom}}><div className="graph-canvas" style={{width: layout.width, height: layout.height, transform: `scale(${zoom})`}}>
         <svg width={layout.width} height={layout.height}><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" /></marker></defs>
@@ -266,10 +325,11 @@ function ServingGraphPage() {
       </div></div>}</div></div>
       <div className="panel node-editor"><div className="panel-title"><span>节点配置</span><small>{selected || "未选择"}</small></div>{node ? <div className="editor-form">
         <label>节点类<input value={node.clazz} readOnly /></label><label>配置类<input value={node.configClazz || "—"} readOnly /></label>
+        {selected === "operation" && <div className="operation-presets"><span>内置策略</span><button onClick={() => selectOperationRule("SlidingWindowDiversityOperationRule")}>滑窗多样性</button><button onClick={() => selectOperationRule("WeightedChannelOperationRule")}>按通道比例分流</button><small><code>diversityDimensions</code> 和 <code>channelRatios</code> 是参数；<code>operationName</code> 必须填写规则类名。</small></div>}
         <div className="editor-inline"><label className="switch-label"><input type="checkbox" checked={node.open} onChange={(event) => updateNode({open: event.target.checked})}/>启用节点</label><label>超时（ms）<input type="number" min="1" value={node.timeout} onChange={(event) => updateNode({timeout: Number(event.target.value)})}/></label></div>
         <label>content JSON<textarea spellCheck={false} value={content} onChange={(event) => setContent(event.target.value)} /></label>
         <button onClick={applyContent}>应用到草稿</button></div> : <div className="empty">请选择节点</div>}</div></section>
-    <section className="panel graph-release"><div className="panel-title"><span>版本发布与回滚</span><button className="primary" disabled={!graph || busy} onClick={() => void publish()}>{busy ? "处理中…" : "校验并发布完整图"}</button></div>
+    <section className="panel graph-release"><div className="panel-title"><span>实验发布与回滚</span><button className="primary" disabled={!graph || busy} onClick={() => void publish()}>{busy ? "处理中…" : `发布实验 ${experiment}`}</button></div>
       <div className="history-list">{history.length === 0 && <div className="empty">首次发布后将在此保留版本</div>}{history.map((item) => <div key={item.version}><code>{item.version}</code><span>{item.published_at ? new Date(item.published_at).toLocaleString() : "—"}</span><button disabled={busy || item.version === version} onClick={() => void rollback(item.version)}>{item.version === version ? "当前版本" : "回滚至此"}</button></div>)}</div></section>
     <footer>OpenRec Console · rec-server receives only validated full graph snapshots</footer></main>;
 }

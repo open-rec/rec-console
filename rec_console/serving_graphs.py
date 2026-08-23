@@ -2,10 +2,12 @@
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import quote
 
 
 class RecServerError(RuntimeError):
@@ -20,18 +22,36 @@ class RecServerClient:
             "SERVING_GRAPH_TOKEN", "openrec-serving-graph-token-change-me")
         self.timeout = timeout
 
-    def current(self):
-        return self._request("GET", "/internal/serving-graph")
+    def current(self, experiment=None):
+        suffix = "?experiment=" + experiment if experiment else ""
+        return self._request("GET", "/internal/serving-graph" + suffix)
 
-    def activate(self, graph, version):
-        return self._request("POST", "/internal/serving-graph", graph, version)
+    def activate(self, graph, version, experiment="default"):
+        return self._request("POST", "/internal/serving-graph", graph, version, experiment)
 
-    def _request(self, method, path, body=None, version=None):
+    def configure_routing(self, routing):
+        return self._request("PUT", "/internal/serving-graph/routing", routing)
+
+    def create_experiment(self, name):
+        return self._request("POST", "/internal/serving-graph/experiments", {"name": name})
+
+    def set_experiment_enabled(self, name, enabled):
+        path = "/internal/serving-graph/experiments/%s/enabled" % quote(name, safe="")
+        return self._request("PUT", path, {"enabled": enabled})
+
+    def delete_experiment(self, name):
+        path = "/internal/serving-graph/experiments/%s" % quote(name, safe="")
+        return self._request("DELETE", path)
+
+    def _request(self, method, path, body=None, version=None, experiment=None):
         headers = {"Accept": "application/json", "X-OpenRec-Token": self.token}
         data = None
         if body is not None:
             headers["Content-Type"] = "application/json"
-            headers["X-Graph-Version"] = version
+            if version:
+                headers["X-Graph-Version"] = version
+            if experiment:
+                headers["X-Ab-Experiment"] = experiment
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         request = Request(self.base_url + path, data=data, headers=headers, method=method)
         try:
@@ -39,6 +59,11 @@ class RecServerClient:
                 result = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(detail)
+                detail = parsed.get("message") or parsed.get("error") or detail
+            except ValueError:
+                pass
             raise RecServerError("rec-server rejected serving graph: %s" % detail) from error
         except (URLError, OSError, ValueError) as error:
             raise RecServerError("rec-server serving graph is unavailable: %s" % error) from error
@@ -50,14 +75,17 @@ class RecServerClient:
 
 
 class ServingGraphStore:
+    EXPERIMENT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
     def __init__(self, client=None, data_dir=None):
         self.client = client or RecServerClient()
         root = Path(data_dir or os.environ.get("REC_CONSOLE_DATA_DIR", "/var/lib/rec-console"))
         self.root = root / "serving_graph"
 
-    def current(self):
-        runtime = self.client.current()
-        current_path = self.root / "current.json"
+    def current(self, experiment="default"):
+        runtime = self.client.current(None if experiment == "default" else experiment)
+        overview = runtime if experiment == "default" else self.client.current()
+        experiment_root = self._experiment_root(experiment)
+        current_path = experiment_root / "current.json"
         current = self._read(current_path) if current_path.exists() else {}
         if not current and runtime.get("graph"):
             current = {
@@ -66,54 +94,82 @@ class ServingGraphStore:
                 "checksum": runtime.get("checksum"),
                 "graph": runtime["graph"],
             }
-            self._persist(current)
+            self._persist(current, experiment)
         return {
             "version": runtime.get("version") or current.get("version"),
             "checksum": runtime.get("checksum"),
             "loaded_at": runtime.get("loadedAt"),
             "graph": runtime.get("graph"),
-            "history": self.history(),
+            "experiment": experiment,
+            "history": self.history(experiment),
+            "experiments": overview.get("experiments"),
+            "routing": overview.get("routing"),
         }
 
-    def publish(self, graph):
+    def publish(self, graph, experiment="default"):
         validated = self.validate(graph)
         version = datetime.now(timezone.utc).strftime("graph-%Y%m%dT%H%M%S%fZ")
-        runtime = self.client.activate(validated, version)
+        runtime = self.client.activate(validated, version, experiment)
         release = {
             "version": version,
             "published_at": datetime.now(timezone.utc).isoformat(),
             "checksum": runtime.get("checksum") if runtime else None,
             "graph": validated,
+            "experiment": experiment,
         }
-        self._persist(release)
-        release["history"] = self.history()
+        self._persist(release, experiment)
+        release["history"] = self.history(experiment)
         return release
 
-    def rollback(self, version=None):
-        current = self._read(self.root / "current.json") if (self.root / "current.json").exists() else {}
-        candidates = [item for item in self.history() if item["version"] != current.get("version")]
+    def set_experiment_enabled(self, experiment, enabled):
+        if enabled and experiment != "default":
+            overview = self.client.current()
+            if experiment not in (overview.get("experiments") or {}):
+                current_path = self._experiment_root(experiment) / "current.json"
+                if not current_path.exists():
+                    raise ValueError("experiment does not exist in runtime or console history: %s" % experiment)
+                release = self._read(current_path)
+                if release.get("version") in (None, "draft"):
+                    raise ValueError("experiment graph must be published before enabling: %s" % experiment)
+                self.client.create_experiment(experiment)
+                self.client.activate(release["graph"], release["version"], experiment)
+        return self.client.set_experiment_enabled(experiment, enabled)
+
+    def rollback(self, version=None, experiment="default"):
+        experiment_root = self._experiment_root(experiment)
+        current = self._read(experiment_root / "current.json") if (experiment_root / "current.json").exists() else {}
+        candidates = [item for item in self.history(experiment) if item["version"] != current.get("version")]
         target = version or (candidates[0]["version"] if candidates else None)
-        path = self.root / "history" / (str(target) + ".json")
+        path = experiment_root / "history" / (str(target) + ".json")
         if not target or not path.exists():
             raise ValueError("serving graph rollback target is not retained: %s" % target)
         release = self._read(path)
-        runtime = self.client.activate(release["graph"], release["version"])
+        runtime = self.client.activate(release["graph"], release["version"], experiment)
         if runtime:
             release["checksum"] = runtime.get("checksum")
         release["published_at"] = datetime.now(timezone.utc).isoformat()
-        self._write(self.root / "current.json", release)
-        release["history"] = self.history()
+        self._write(experiment_root / "current.json", release)
+        release["history"] = self.history(experiment)
         return release
 
-    def history(self):
-        directory = self.root / "history"
+    def history(self, experiment="default"):
+        directory = self._experiment_root(experiment) / "history"
         if not directory.exists():
             return []
         return [self._read(path) for path in sorted(directory.glob("*.json"), reverse=True)[:20]]
 
-    def _persist(self, release):
-        self._write(self.root / "history" / (release["version"] + ".json"), release)
-        self._write(self.root / "current.json", release)
+    def _persist(self, release, experiment="default"):
+        experiment_root = self._experiment_root(experiment)
+        self._write(experiment_root / "history" / (release["version"] + ".json"), release)
+        self._write(experiment_root / "current.json", release)
+
+    def _experiment_root(self, experiment):
+        if not experiment or experiment == "default":
+            return self.root
+        safe = str(experiment).strip()
+        if not self.EXPERIMENT_NAME.fullmatch(safe):
+            raise ValueError("experiment name must start with a letter and contain only letters, numbers and underscores")
+        return self.root / "experiments" / safe
 
     @staticmethod
     def validate(graph):
