@@ -539,14 +539,16 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
-type ModelRelease = {version: string; created_at?: string;
-  metrics?: {auc?: number | null; samples?: number; feature_dim?: number};
+type ModelRelease = {version: string; created_at?: string; model_type?: "lr" | "fm";
+  metrics?: {auc?: number | null; samples?: number; feature_dim?: number; factor_dim?: number};
   gate?: {passed?: boolean; min_auc?: number}};
 type ModelReleaseSet = {scene: string; active_version: string | null; releases: ModelRelease[]};
 
 function ModelPage() {
   const [scene, setScene] = useState("scene_0"); const [data, setData] = useState<ModelReleaseSet | null>(null);
   const [busy, setBusy] = useState(""); const [error, setError] = useState(""); const [message, setMessage] = useState("");
+  const [training, setTraining] = useState({business_date: new Date().toISOString().slice(0, 10),
+    revision: "r001", model_type: "fm" as "lr" | "fm", epochs: 5, factor_dim: 8, min_auc: 0});
   const load = useCallback(async () => { setError(""); try { setData(await api<ModelReleaseSet>(`/api/models/releases/${encodeURIComponent(scene)}`)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "模型版本读取失败"); } }, [scene]);
   useEffect(() => { void load(); }, [load]);
@@ -559,13 +561,32 @@ function ModelPage() {
       setMessage(`${rollback ? "回滚" : "发布"}成功：${result.active_version}`); setData(result); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "模型操作失败"); } finally { setBusy(""); }
   }
+  async function trainAndDeploy() {
+    if (!window.confirm(`确认训练并部署 ${training.model_type.toUpperCase()} 排序模型？`)) return;
+    setBusy("train"); setError(""); setMessage("");
+    try {
+      await api("/api/airflow/dags/openrec_rank_model/runs", {method: "POST", body: JSON.stringify({conf: {
+        ...training, scene,
+      }})});
+      setMessage("训练任务已提交；DAG 评估通过后会自动部署，完成后请刷新版本列表");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "模型训练任务提交失败"); }
+    finally { setBusy(""); }
+  }
   return <main><header><div><p className="eyebrow">MODEL LIFECYCLE</p><h1>Rank Model</h1><p className="subtitle">训练评估产物、原子发布与保留版本回滚</p></div>
     <div className="actions"><input value={scene} onChange={(event) => setScene(event.target.value)}/><button onClick={() => void load()}>↻ 刷新</button></div></header>
     {error && <div className="notice error page-notice">{error}</div>}{message && <div className="notice success page-notice">{message}</div>}
+    <section className="panel config-panel"><div className="panel-title"><span>训练与更新部署</span><small>评估通过后自动原子切换</small></div>
+      <div className="config-grid"><label>模型类型 <select value={training.model_type} onChange={(e) => setTraining({...training, model_type: e.target.value as "lr" | "fm"})}><option value="fm">FM</option><option value="lr">LR</option></select></label>
+        <label>业务日期 <input type="date" value={training.business_date} onChange={(e) => setTraining({...training, business_date: e.target.value})}/></label>
+        <label>Revision <input value={training.revision} onChange={(e) => setTraining({...training, revision: e.target.value})}/></label>
+        <label>训练轮数 <input type="number" min="1" max="100" value={training.epochs} onChange={(e) => setTraining({...training, epochs: Number(e.target.value)})}/></label>
+        <label>最低 AUC <input type="number" min="0" max="1" step="0.01" value={training.min_auc} onChange={(e) => setTraining({...training, min_auc: Number(e.target.value)})}/></label>
+        {training.model_type === "fm" && <label>隐向量维度 <input type="number" min="1" max="256" value={training.factor_dim} onChange={(e) => setTraining({...training, factor_dim: Number(e.target.value)})}/></label>}
+      </div><div className="config-actions"><span>复用当前实时用户与物品特征</span><button className="primary" disabled={!!busy} onClick={() => void trainAndDeploy()}>{busy === "train" ? "提交中…" : "训练并更新部署"}</button></div></section>
     <section className="graph-status"><div><span>ACTIVE VERSION</span><strong>{data?.active_version || "未发布"}</strong></div><div><span>SCENE</span><code>{scene}</code></div><div><span>RETAINED</span><strong>{data?.releases.length || 0}</strong></div></section>
     <section className="panel model-releases"><div className="panel-title"><span>模型版本与评估指标</span><button disabled={!data?.active_version || !!busy} onClick={() => void activate()}>回滚上一版本</button></div>
       <div className="model-release-list">{data?.releases.map((release) => { const active = release.version === data.active_version; return <article className={active ? "active" : ""} key={release.version}>
-        <div><code>{release.version}</code><small>{release.created_at ? new Date(release.created_at).toLocaleString() : "—"}</small></div><span>AUC <b>{release.metrics?.auc == null ? "N/A" : release.metrics.auc.toFixed(4)}</b></span><span>SAMPLES <b>{release.metrics?.samples ?? "—"}</b></span><span>DIM <b>{release.metrics?.feature_dim ?? "—"}</b></span>
+        <div><code>{release.version}</code><small>{release.created_at ? new Date(release.created_at).toLocaleString() : "—"}</small></div><span>MODEL <b>{(release.model_type || "lr").toUpperCase()}{release.metrics?.factor_dim ? ` · K${release.metrics.factor_dim}` : ""}</b></span><span>AUC <b>{release.metrics?.auc == null ? "N/A" : release.metrics.auc.toFixed(4)}</b></span><span>SAMPLES <b>{release.metrics?.samples ?? "—"}</b></span><span>DIM <b>{release.metrics?.feature_dim ?? "—"}</b></span>
         <em className={release.gate?.passed ? "passed" : "failed"}>{release.gate?.passed ? "GATE PASSED" : "GATE FAILED"}</em><button disabled={active || !release.gate?.passed || !!busy} onClick={() => void activate(release.version)}>{active ? "当前在线" : "发布此版本"}</button>
       </article>; })}{data?.releases.length === 0 && <div className="empty">运行 openrec_rank_model DAG 后将在此显示版本</div>}</div></section><footer>OpenRec Console · rank-engine model activation is atomic</footer></main>;
 }

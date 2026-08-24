@@ -81,8 +81,9 @@ and retry delay. Airflow remains the execution and run-state source of truth.
 `SERVING_GRAPH_TOKEN` must have the same value in rec-console and rec-server. The Compose defaults
 are intended only for the example environment; override the value for a shared deployment.
 
-The Rank Model module lists evaluated immutable releases and their AUC, sample count, feature
-dimension, and gate result. Publish asks rank-engine to load the complete artifact before updating
+The Rank Model module can submit LR or FM training through `openrec_rank_model`, then lists
+evaluated immutable releases and their model type, AUC, sample count, feature dimension, and gate
+result. The DAG deploys releases that pass the gate; manual publish asks rank-engine to load the complete artifact before updating
 the console's active record; rollback uses the same atomic activation path and retains activation
 history under the console data volume.
 

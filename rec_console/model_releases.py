@@ -64,6 +64,8 @@ class ModelReleaseStore:
             "type": manifest.get("model_type", "lr"),
             "model": "/models/releases/%s/%s/%s" % (scene, version, manifest["model"]),
             "feature": "/models/releases/%s/%s/%s" % (scene, version, manifest["feature"]),
+            **({"factor_dim": manifest.get("metrics", {}).get("factor_dim")}
+               if manifest.get("model_type") == "fm" else {}),
         }).encode()
         request = urllib.request.Request(self.rank_url + "/model/load", data=payload,
                                          headers={"Content-Type": "application/json"}, method="POST")
