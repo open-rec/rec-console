@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 from rec_console.model_releases import ModelReleaseStore
 
@@ -12,9 +13,13 @@ def artifact(root, scene, version, passed=True):
     path = root / scene / version
     path.mkdir(parents=True)
     (path / "lr.pth").write_bytes(b"model")
-    (path / "lr.features.json").write_text("{}")
+    feature = {"version": 1, "model_type": "lr", "input_dim": 7,
+               "user": [], "item": []}
+    feature_bytes = json.dumps(feature).encode()
+    (path / "lr.features.json").write_bytes(feature_bytes)
     manifest = {"scene": scene, "version": version, "model_type": "lr",
                 "model": "lr.pth", "feature": "lr.features.json",
+                "input_dim": 7, "feature_sha256": hashlib.sha256(feature_bytes).hexdigest(),
                 "metrics": {"auc": .7}, "gate": {"passed": passed}}
     (path / "manifest.json").write_text(json.dumps(manifest))
 
@@ -36,3 +41,15 @@ def test_publish_rejects_failed_evaluation(tmp_path):
         assert False
     except ValueError as error:
         assert "evaluation" in str(error)
+
+
+def test_publish_rejects_tampered_feature_sidecar(tmp_path):
+    root = tmp_path / "artifacts"
+    artifact(root, "home", "bad")
+    (root / "home" / "bad" / "lr.features.json").write_text("{}")
+    store = FakeStore(root, tmp_path / "data")
+    try:
+        store.publish("home", "bad")
+        assert False
+    except ValueError as error:
+        assert "checksum" in str(error)

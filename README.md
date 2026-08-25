@@ -87,6 +87,11 @@ result. The DAG deploys releases that pass the gate; manual publish asks rank-en
 the console's active record; rollback uses the same atomic activation path and retains activation
 history under the console data volume.
 
+New releases also expose the model-specific Feature Set, catalog version, fitted input dimension,
+and FeatureSpace SHA-256. Publish and rollback validate the sidecar checksum, declared model type,
+and dimension before activation. The console and rank-engine consume only the fitted sidecar stored
+with that model release; the training-time global catalog is not an online dependency.
+
 The Data Analysis module submits a four-core Spark aggregation over the selected Hive event
 partitions and caches identical queries for five minutes. It reports PV/UV CTR, PV/UV CVR, active
 items, GMV, their underlying counts, and a daily trend. GMV requires `buy.extFields.quantity` and

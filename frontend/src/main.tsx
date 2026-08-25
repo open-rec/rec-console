@@ -540,6 +540,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 type ModelRelease = {version: string; created_at?: string; model_type?: "lr" | "fm";
+  feature_set?: string; catalog_version?: number; input_dim?: number;
   metrics?: {auc?: number | null; samples?: number; feature_dim?: number; factor_dim?: number};
   gate?: {passed?: boolean; min_auc?: number}};
 type ModelReleaseSet = {scene: string; active_version: string | null; releases: ModelRelease[]};
@@ -586,7 +587,7 @@ function ModelPage() {
     <section className="graph-status"><div><span>ACTIVE VERSION</span><strong>{data?.active_version || "未发布"}</strong></div><div><span>SCENE</span><code>{scene}</code></div><div><span>RETAINED</span><strong>{data?.releases.length || 0}</strong></div></section>
     <section className="panel model-releases"><div className="panel-title"><span>模型版本与评估指标</span><button disabled={!data?.active_version || !!busy} onClick={() => void activate()}>回滚上一版本</button></div>
       <div className="model-release-list">{data?.releases.map((release) => { const active = release.version === data.active_version; return <article className={active ? "active" : ""} key={release.version}>
-        <div><code>{release.version}</code><small>{release.created_at ? new Date(release.created_at).toLocaleString() : "—"}</small></div><span>MODEL <b>{(release.model_type || "lr").toUpperCase()}{release.metrics?.factor_dim ? ` · K${release.metrics.factor_dim}` : ""}</b></span><span>AUC <b>{release.metrics?.auc == null ? "N/A" : release.metrics.auc.toFixed(4)}</b></span><span>SAMPLES <b>{release.metrics?.samples ?? "—"}</b></span><span>DIM <b>{release.metrics?.feature_dim ?? "—"}</b></span>
+        <div><code>{release.version}</code><small>{release.feature_set || "legacy feature space"}{release.catalog_version ? ` · catalog v${release.catalog_version}` : ""}</small></div><span>MODEL <b>{(release.model_type || "lr").toUpperCase()}{release.metrics?.factor_dim ? ` · K${release.metrics.factor_dim}` : ""}</b></span><span>AUC <b>{release.metrics?.auc == null ? "N/A" : release.metrics.auc.toFixed(4)}</b></span><span>SAMPLES <b>{release.metrics?.samples ?? "—"}</b></span><span>DIM <b>{release.input_dim ?? release.metrics?.feature_dim ?? "—"}</b></span>
         <em className={release.gate?.passed ? "passed" : "failed"}>{release.gate?.passed ? "GATE PASSED" : "GATE FAILED"}</em><button disabled={active || !release.gate?.passed || !!busy} onClick={() => void activate(release.version)}>{active ? "当前在线" : "发布此版本"}</button>
       </article>; })}{data?.releases.length === 0 && <div className="empty">运行 openrec_rank_model DAG 后将在此显示版本</div>}</div></section><footer>OpenRec Console · rank-engine model activation is atomic</footer></main>;
 }

@@ -1,5 +1,6 @@
 """Versioned rank-model activation and rollback control."""
 
+import hashlib
 import json
 import os
 import urllib.error
@@ -56,6 +57,19 @@ class ModelReleaseStore:
         for name in (manifest.get("model"), manifest.get("feature")):
             if not name or not (self.artifact_root / scene / version / name).is_file():
                 raise ValueError("model artifact is incomplete: %s" % version)
+        feature_path = self.artifact_root / scene / version / manifest["feature"]
+        expected_hash = manifest.get("feature_sha256")
+        if expected_hash and hashlib.sha256(feature_path.read_bytes()).hexdigest() != expected_hash:
+            raise ValueError("model feature artifact checksum does not match: %s" % version)
+        try:
+            feature_space = json.loads(feature_path.read_text())
+        except json.JSONDecodeError as error:
+            raise ValueError("model feature artifact is invalid: %s" % version) from error
+        expected_dim = manifest.get("input_dim")
+        if expected_dim is not None and int(feature_space.get("input_dim", -1)) != int(expected_dim):
+            raise ValueError("model feature dimension does not match manifest: %s" % version)
+        if feature_space.get("model_type") and feature_space["model_type"] != manifest.get("model_type"):
+            raise ValueError("model feature type does not match manifest: %s" % version)
         return manifest
 
     def _load(self, scene, manifest):
