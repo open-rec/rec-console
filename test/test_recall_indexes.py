@@ -15,8 +15,8 @@ def manager(indexes=None, active=None):
 
 def test_prepare_creates_staging_index_without_touching_alias():
     subject = manager()
-    result = subject.prepare("i2i", "2026-08-20", "r002")
-    assert result["index"] == "openrec-recall-i2i-20260820-r002"
+    result = subject.prepare("content-i2i", "2026-08-20", "r002")
+    assert result["index"] == "openrec-recall-content-i2i-20260820-r002"
     assert result["writable"] is True
     subject.client.indices.create.assert_called_once()
     subject.client.indices.update_aliases.assert_not_called()
@@ -46,19 +46,19 @@ def test_rollback_only_switches_alias_to_retained_index():
 
 def test_list_indexes_allows_an_empty_release_history():
     subject = manager()
-    result = subject.list_indexes("i2i")
-    assert result == {"algorithm": "i2i", "active_indexes": [], "indexes": [],
+    result = subject.list_indexes("content-i2i")
+    assert result == {"algorithm": "content-i2i", "active_indexes": [], "indexes": [],
                       "releases": []}
     subject.client.indices.get.assert_called_once_with(
-        index="openrec-recall-i2i-*", allow_no_indices=True, ignore_unavailable=True
+        index="openrec-recall-content-i2i-*", allow_no_indices=True, ignore_unavailable=True
     )
 
 
 def test_switch_moves_alias_without_deleting_an_index():
-    indexes = ["openrec-recall-i2i-20260820-r001",
-               "openrec-recall-i2i-20260819-r001"]
+    indexes = ["openrec-recall-item-cf-i2i-20260820-r001",
+               "openrec-recall-item-cf-i2i-20260819-r001"]
     subject = manager(indexes, [indexes[0]])
-    result = subject.switch("i2i", indexes[1])
+    result = subject.switch("item-cf-i2i", indexes[1])
     assert result["index"] == indexes[1]
     subject.client.indices.update_aliases.assert_called_once()
     subject.client.indices.delete.assert_not_called()

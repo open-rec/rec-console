@@ -8,14 +8,15 @@ from rec_console.dag_configs import DagConfigStore, DEFAULT_DAILY_RECALL
 def test_publish_and_rollback_versioned_daily_config(tmp_path):
     store = DagConfigStore(tmp_path / "data", tmp_path / "published")
     first = store.publish(DEFAULT_DAILY_RECALL)
-    changed = dict(DEFAULT_DAILY_RECALL, schedule="30 3 * * *", algorithms=["hot", "i2i"])
+    changed = dict(DEFAULT_DAILY_RECALL, schedule="30 3 * * *", algorithms=["hot", "item_cf_i2i"])
     second = store.publish(changed)
     assert store.current()["version"] == second["version"]
     assert json.loads((tmp_path / "published" / "openrec_daily_recall.json").read_text()) \
         ["schedule"] == "30 3 * * *"
     rolled_back = store.rollback()
     assert rolled_back["version"] == first["version"]
-    assert store.current()["config"]["algorithms"] == ["hot", "new", "i2i", "embedding"]
+    assert store.current()["config"]["algorithms"] == [
+        "hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb"]
 
 
 @pytest.mark.parametrize("change", [

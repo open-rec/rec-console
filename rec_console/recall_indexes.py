@@ -3,7 +3,8 @@
 import re
 
 
-RECALL_ALGORITHMS = ("hot", "new", "i2i")
+RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i")
+I2I_ALGORITHMS = ("item-cf-i2i", "content-i2i")
 
 
 class RecallIndexManager:
@@ -123,14 +124,17 @@ class RecallIndexManager:
     @staticmethod
     def _algorithm(algorithm):
         if algorithm not in RECALL_ALGORITHMS:
-            raise ValueError("algorithm must be hot, new or i2i")
+            raise ValueError("unsupported recall serving table: %s" % algorithm)
 
     @staticmethod
     def _mapping(algorithm):
         properties = {"scene": {"type": "keyword"}, "score": {"type": "double"}}
-        if algorithm == "i2i":
+        if algorithm in I2I_ALGORITHMS:
             properties.update({"left_item": {"type": "keyword"},
                                "right_item": {"type": "keyword"}})
+        elif algorithm == "user-cf-u2i":
+            properties.update({"user": {"type": "keyword"},
+                               "item": {"type": "keyword"}})
         else:
             properties["item"] = {"type": "keyword"}
             if algorithm == "new":

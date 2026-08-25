@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-type Algorithm = "hot" | "new" | "i2i";
-type DailyAlgorithm = Algorithm | "embedding";
+type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i";
+type DailyAlgorithm = "hot" | "new" | "item_cf_i2i" | "content_i2i" | "user_cf_u2i" | "item_seq_emb";
 type Release = { index: string; active: boolean; documents: number };
 type ReleaseSet = {
   algorithm: Algorithm;
@@ -12,13 +12,18 @@ type ReleaseSet = {
   releases: Release[];
 };
 
-const algorithms: Algorithm[] = ["hot", "new", "i2i"];
-const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "i2i", "embedding"];
-const labels: Record<DailyAlgorithm, string> = {
+const algorithms: Algorithm[] = ["hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i"];
+const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb"];
+const labels: Record<Algorithm | DailyAlgorithm, string> = {
   hot: "热门召回",
   new: "新品召回",
-  i2i: "I2I 召回",
-  embedding: "Embedding 召回",
+  item_cf_i2i: "ItemCF I2I 召回",
+  content_i2i: "内容 I2I 召回",
+  user_cf_u2i: "UserCF U2I 召回",
+  "item-cf-i2i": "ItemCF I2I 召回",
+  "content-i2i": "内容 I2I 召回",
+  "user-cf-u2i": "UserCF U2I 召回",
+  item_seq_emb: "Item Sequence Embedding 召回",
 };
 
 type ModuleKey = "recall" | "entities" | "serving" | "dag" | "monitor" | "analytics" | "airflow" | "model";

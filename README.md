@@ -75,7 +75,7 @@ restrict it with the deployment firewall until console authentication is introdu
 
 Cluster Compose mounts the Airflow Simple Auth password file read-only, a persistent console
 history volume, and the shared `openrec-dag-config` publication volume. Supported daily recall
-fields are cron schedule, ordered hot/new/i2i jobs, default revision, index retention, retry count,
+fields are cron schedule, the ordered six-algorithm recall pipeline, default revision, index retention, retry count,
 and retry delay. Airflow remains the execution and run-state source of truth.
 
 `SERVING_GRAPH_TOKEN` must have the same value in rec-console and rec-server. The Compose defaults
