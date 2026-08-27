@@ -1,5 +1,11 @@
 # rec-console
 
+[![CI](https://github.com/open-rec/rec-console/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-console/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-20-5FA04E?logo=nodedotjs&logoColor=white)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/frontend-React-61DAFB?logo=react&logoColor=black)
+
 Management and control plane for OpenRec. The first module owns the lifecycle of versioned recall
 indexes: staging-index creation, document-count validation, atomic active-alias switching, retention,
 version listing, explicit switching, and emergency rollback. Online rec-server instances only read
