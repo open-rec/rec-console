@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from rec_console.dag_configs import DagConfigStore, DEFAULT_DAILY_RECALL
+from rec_console.dag_configs import (DagConfigStore, DEFAULT_DAILY_RECALL,
+                                     DEFAULT_DAILY_USER_RECALL)
 
 
 def test_publish_and_rollback_versioned_daily_config(tmp_path):
@@ -27,3 +28,20 @@ def test_rejects_invalid_daily_config(change, tmp_path):
     store = DagConfigStore(tmp_path / "data", tmp_path / "published")
     with pytest.raises(ValueError):
         store.publish(dict(DEFAULT_DAILY_RECALL, **change))
+
+
+def test_user_recall_config_has_independent_version_and_publish_file(tmp_path):
+    store = DagConfigStore(tmp_path / "data", tmp_path / "published",
+                           "openrec_daily_user_recall")
+    release = store.publish(DEFAULT_DAILY_USER_RECALL)
+    assert store.current()["version"] == release["version"]
+    published = json.loads((tmp_path / "published" /
+                            "openrec_daily_user_recall.json").read_text())
+    assert published["algorithms"] == ["user_cf_u2u", "content_u2u", "user_emb_u2u"]
+
+
+def test_user_recall_config_rejects_item_algorithms(tmp_path):
+    store = DagConfigStore(tmp_path / "data", tmp_path / "published",
+                           "openrec_daily_user_recall")
+    with pytest.raises(ValueError):
+        store.publish(dict(DEFAULT_DAILY_USER_RECALL, algorithms=["item_cf_i2i"]))

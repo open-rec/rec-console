@@ -17,47 +17,47 @@ class ModelReleaseStore:
             "REC_CONSOLE_DATA", "/var/lib/rec-console")) / "models"
         self.rank_url = (rank_url or os.environ.get("RANK_ENGINE_URL", "http://rank-engine:8123")).rstrip("/")
 
-    def list(self, scene):
+    def list(self, scene, target_type="item"):
         releases = []
-        scene_root = self.artifact_root / scene
+        scene_root = self.artifact_root / target_type / scene
         for path in sorted(scene_root.glob("*/manifest.json"), reverse=True):
             try:
                 releases.append(json.loads(path.read_text()))
             except (OSError, json.JSONDecodeError):
                 continue
-        current = self._read(self.data_root / scene / "current.json")
+        current = self._read(self.data_root / target_type / scene / "current.json")
         return {"scene": scene, "active_version": current.get("version") if current else None,
-                "active": current, "releases": releases}
+                "target_type": target_type, "active": current, "releases": releases}
 
-    def publish(self, scene, version):
-        manifest = self._manifest(scene, version)
+    def publish(self, scene, version, target_type="item"):
+        manifest = self._manifest(scene, version, target_type)
         if not manifest.get("gate", {}).get("passed"):
             raise ValueError("model did not pass its evaluation gate")
         activated = self._load(scene, manifest)
         release = dict(manifest)
         release.update({"status": "active", "activated_at": datetime.now(timezone.utc).isoformat(),
                         "runtime": activated})
-        self._write(self.data_root / scene / "current.json", release)
-        self._write(self.data_root / scene / "history" / (release["activated_at"].replace(":", "-") + ".json"), release)
-        return dict(self.list(scene), activated=release)
+        self._write(self.data_root / target_type / scene / "current.json", release)
+        self._write(self.data_root / target_type / scene / "history" / (release["activated_at"].replace(":", "-") + ".json"), release)
+        return dict(self.list(scene, target_type), activated=release)
 
-    def rollback(self, scene, version=None):
-        listing = self.list(scene)
+    def rollback(self, scene, version=None, target_type="item"):
+        listing = self.list(scene, target_type)
         active = listing["active_version"]
         candidates = [item for item in listing["releases"] if item.get("version") != active]
         target = version or (candidates[0].get("version") if candidates else None)
         if not target:
             raise ValueError("no retained model version is available for rollback")
-        return self.publish(scene, target)
+        return self.publish(scene, target, target_type)
 
-    def _manifest(self, scene, version):
-        manifest = self._read(self.artifact_root / scene / version / "manifest.json")
+    def _manifest(self, scene, version, target_type="item"):
+        manifest = self._read(self.artifact_root / target_type / scene / version / "manifest.json")
         if not manifest or manifest.get("scene") != scene or manifest.get("version") != version:
             raise ValueError("model version is not retained: %s" % version)
         for name in (manifest.get("model"), manifest.get("feature")):
-            if not name or not (self.artifact_root / scene / version / name).is_file():
+            if not name or not (self.artifact_root / target_type / scene / version / name).is_file():
                 raise ValueError("model artifact is incomplete: %s" % version)
-        feature_path = self.artifact_root / scene / version / manifest["feature"]
+        feature_path = self.artifact_root / target_type / scene / version / manifest["feature"]
         expected_hash = manifest.get("feature_sha256")
         if expected_hash and hashlib.sha256(feature_path.read_bytes()).hexdigest() != expected_hash:
             raise ValueError("model feature artifact checksum does not match: %s" % version)
@@ -76,8 +76,8 @@ class ModelReleaseStore:
         version = manifest["version"]
         payload = json.dumps({
             "type": manifest.get("model_type", "lr"),
-            "model": "/models/releases/%s/%s/%s" % (scene, version, manifest["model"]),
-            "feature": "/models/releases/%s/%s/%s" % (scene, version, manifest["feature"]),
+            "model": "/models/releases/%s/%s/%s/%s" % (manifest.get("target_type", "item"), scene, version, manifest["model"]),
+            "feature": "/models/releases/%s/%s/%s/%s" % (manifest.get("target_type", "item"), scene, version, manifest["feature"]),
             **({"factor_dim": manifest.get("metrics", {}).get("factor_dim")}
                if manifest.get("model_type") == "fm" else {}),
         }).encode()

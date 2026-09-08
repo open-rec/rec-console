@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 
 type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i";
-type DailyAlgorithm = "hot" | "new" | "item_cf_i2i" | "content_i2i" | "user_cf_u2i" | "item_seq_emb";
+type DailyAlgorithm = "hot" | "new" | "item_cf_i2i" | "content_i2i" | "user_cf_u2i" | "item_seq_emb"
+  | "user_cf_u2u" | "content_u2u" | "user_emb_u2u";
 type Release = { index: string; active: boolean; documents: number };
 type ReleaseSet = {
   algorithm: Algorithm;
@@ -14,6 +15,7 @@ type ReleaseSet = {
 
 const algorithms: Algorithm[] = ["hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i"];
 const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb"];
+const dailyUserAlgorithms: DailyAlgorithm[] = ["user_cf_u2u", "content_u2u", "user_emb_u2u"];
 const labels: Record<Algorithm | DailyAlgorithm, string> = {
   hot: "热门召回",
   new: "新品召回",
@@ -24,6 +26,9 @@ const labels: Record<Algorithm | DailyAlgorithm, string> = {
   "content-i2i": "内容 I2I 召回",
   "user-cf-u2i": "UserCF U2I 召回",
   item_seq_emb: "Item Sequence Embedding 召回",
+  user_cf_u2u: "UserCF U2U 召回",
+  content_u2u: "内容 U2U 召回",
+  user_emb_u2u: "User Embedding U2U 召回",
 };
 
 type ModuleKey = "recall" | "entities" | "serving" | "dag" | "monitor" | "analytics" | "airflow" | "model";
@@ -380,6 +385,10 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
   const [message, setMessage] = useState("");
   const [dagDetail, setDagDetail] = useState<DagDetail | null>(null);
   const [selectedTask, setSelectedTask] = useState("");
+  const configurableDag = selected === "openrec_daily_user_recall"
+    ? "openrec_daily_user_recall" : "openrec_daily_recall";
+  const availableAlgorithms = configurableDag === "openrec_daily_user_recall"
+    ? dailyUserAlgorithms : dailyAlgorithms;
 
   const load = useCallback(async () => {
     setError("");
@@ -389,13 +398,13 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
         setDags(dagResult.dags || []);
       } else {
         const configResult = await api<{version: string | null; config: DagConfig; history: Array<{version: string; published_at?: string}>}>(
-          "/api/dag-configs/openrec_daily_recall");
+          `/api/dag-configs/${configurableDag}`);
         setConfig(configResult.config);
         setVersion(configResult.version);
         setHistory(configResult.history || []);
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "无法加载 DAG 管控数据"); }
-  }, [mode]);
+  }, [mode, configurableDag]);
 
   const loadRuns = useCallback(async (dagId: string) => {
     try {
@@ -459,7 +468,7 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
   async function publishConfig() {
     setBusy("publish"); setError(""); setMessage("");
     try {
-      const result = await api<{version: string}>("/api/dag-configs/openrec_daily_recall/publish", {
+      const result = await api<{version: string}>(`/api/dag-configs/${configurableDag}/publish`, {
         method: "POST", body: JSON.stringify(config),
       });
       setMessage(`配置 ${result.version} 已发布，Airflow 将在下一次解析时生效`); await load();
@@ -471,7 +480,7 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
     if (!window.confirm("确认回滚到上一个 DAG 配置版本？")) return;
     setBusy("rollback"); setError("");
     try {
-      await api("/api/dag-configs/openrec_daily_recall/rollback", {
+      await api(`/api/dag-configs/${configurableDag}/rollback`, {
         method: "POST", body: JSON.stringify({}),
       });
       setMessage("DAG 配置已回滚"); await load();
@@ -509,9 +518,12 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
           {taskLog && <pre className="task-log">{taskLog}</pre>}</div>}
       </div>
     </section>}
-    {mode === "offline" && <><section className="panel offline-dag-panel"><div className="panel-title"><span>Airflow DAG · {selected}</span><small>点击任务名查看 DAG 与配置</small></div>
+    {mode === "offline" && <><div className="entity-tabs">
+      <button className={configurableDag === "openrec_daily_recall" ? "active" : ""} onClick={() => setSelected("openrec_daily_recall")}>ITEM DAG</button>
+      <button className={configurableDag === "openrec_daily_user_recall" ? "active" : ""} onClick={() => setSelected("openrec_daily_user_recall")}>USER DAG</button>
+    </div><section className="panel offline-dag-panel"><div className="panel-title"><span>Airflow DAG · {selected}</span><small>点击任务名查看 DAG 与配置</small></div>
       <DagDefinition detail={dagDetail} selectedTask={selectedTask} onSelect={setSelectedTask}/></section>
-      <section className="panel config-panel"><div className="panel-title"><span>Daily Recall 配置</span>
+      <section className="panel config-panel"><div className="panel-title"><span>{configurableDag === "openrec_daily_user_recall" ? "Daily User Recall" : "Daily Item Recall"} 配置</span>
       <small>当前版本 {version || "默认配置"}</small></div>
       <div className="config-grid">
         <label>调度周期 <input value={config.schedule} onChange={(e) => setConfig({...config, schedule: e.target.value})}/></label>
@@ -519,7 +531,7 @@ function DagPage({mode}: {mode: "offline" | "airflow"}) {
         <label>索引保留数 <input type="number" min="2" max="10" value={config.max_index_versions} onChange={(e) => setConfig({...config, max_index_versions: Number(e.target.value)})}/></label>
         <label>失败重试次数 <input type="number" min="0" max="10" value={config.retries} onChange={(e) => setConfig({...config, retries: Number(e.target.value)})}/></label>
         <label>重试间隔（分钟） <input type="number" min="1" max="60" value={config.retry_delay_minutes} onChange={(e) => setConfig({...config, retry_delay_minutes: Number(e.target.value)})}/></label>
-        <fieldset><legend>算法与依赖顺序</legend>{dailyAlgorithms.map((algorithm) => <div className="algorithm-order" key={algorithm}><label className="check">
+        <fieldset><legend>算法与依赖顺序</legend>{availableAlgorithms.map((algorithm) => <div className="algorithm-order" key={algorithm}><label className="check">
           <input type="checkbox" checked={config.algorithms.includes(algorithm)} onChange={(e) => setConfig({...config,
             algorithms: e.target.checked ? [...config.algorithms, algorithm] : config.algorithms.filter((item) => item !== algorithm)})}/>{labels[algorithm]}</label>
           {config.algorithms.includes(algorithm) && <span><button type="button" onClick={() => moveAlgorithm(algorithm, -1)}>↑</button><button type="button" onClick={() => moveAlgorithm(algorithm, 1)}>↓</button></span>}</div>)}</fieldset>
@@ -552,18 +564,19 @@ type ModelReleaseSet = {scene: string; active_version: string | null; releases: 
 
 function ModelPage() {
   const [scene, setScene] = useState("scene_0"); const [data, setData] = useState<ModelReleaseSet | null>(null);
+  const [targetType, setTargetType] = useState<"item" | "user">("item");
   const [busy, setBusy] = useState(""); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [training, setTraining] = useState({business_date: new Date().toISOString().slice(0, 10),
     revision: "r001", model_type: "fm" as "lr" | "fm", epochs: 5, factor_dim: 8, min_auc: 0});
-  const load = useCallback(async () => { setError(""); try { setData(await api<ModelReleaseSet>(`/api/models/releases/${encodeURIComponent(scene)}`)); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "模型版本读取失败"); } }, [scene]);
+  const load = useCallback(async () => { setError(""); try { setData(await api<ModelReleaseSet>(`/api/models/releases/${encodeURIComponent(scene)}?target_type=${targetType}`)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "模型版本读取失败"); } }, [scene, targetType]);
   useEffect(() => { void load(); }, [load]);
   async function activate(version?: string) {
     const rollback = !version;
     if (!window.confirm(rollback ? "确认回滚到上一个评估通过的模型？" : `确认发布 ${version}？`)) return;
     setBusy(version || "rollback"); setError(""); setMessage("");
     try { const result = await api<ModelReleaseSet>(`/api/models/releases/${rollback ? "rollback" : "publish"}`,
-      {method: "POST", body: JSON.stringify(rollback ? {scene} : {scene, version})});
+      {method: "POST", body: JSON.stringify(rollback ? {scene, target_type: targetType} : {scene, version, target_type: targetType})});
       setMessage(`${rollback ? "回滚" : "发布"}成功：${result.active_version}`); setData(result); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "模型操作失败"); } finally { setBusy(""); }
   }
@@ -572,14 +585,14 @@ function ModelPage() {
     setBusy("train"); setError(""); setMessage("");
     try {
       await api("/api/airflow/dags/openrec_rank_model/runs", {method: "POST", body: JSON.stringify({conf: {
-        ...training, scene,
+        ...training, scene, target_type: targetType,
       }})});
       setMessage("训练任务已提交；DAG 评估通过后会自动部署，完成后请刷新版本列表");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "模型训练任务提交失败"); }
     finally { setBusy(""); }
   }
   return <main><header><div><p className="eyebrow">MODEL LIFECYCLE</p><h1>Rank Model</h1><p className="subtitle">训练评估产物、原子发布与保留版本回滚</p></div>
-    <div className="actions"><input value={scene} onChange={(event) => setScene(event.target.value)}/><button onClick={() => void load()}>↻ 刷新</button></div></header>
+    <div className="actions"><select value={targetType} onChange={(event) => setTargetType(event.target.value as "item" | "user")}><option value="item">ITEM</option><option value="user">USER</option></select><input value={scene} onChange={(event) => setScene(event.target.value)}/><button onClick={() => void load()}>↻ 刷新</button></div></header>
     {error && <div className="notice error page-notice">{error}</div>}{message && <div className="notice success page-notice">{message}</div>}
     <section className="panel config-panel"><div className="panel-title"><span>训练与更新部署</span><small>评估通过后自动原子切换</small></div>
       <div className="config-grid"><label>模型类型 <select value={training.model_type} onChange={(e) => setTraining({...training, model_type: e.target.value as "lr" | "fm"})}><option value="fm">FM</option><option value="lr">LR</option></select></label>
@@ -588,7 +601,7 @@ function ModelPage() {
         <label>训练轮数 <input type="number" min="1" max="100" value={training.epochs} onChange={(e) => setTraining({...training, epochs: Number(e.target.value)})}/></label>
         <label>最低 AUC <input type="number" min="0" max="1" step="0.01" value={training.min_auc} onChange={(e) => setTraining({...training, min_auc: Number(e.target.value)})}/></label>
         {training.model_type === "fm" && <label>隐向量维度 <input type="number" min="1" max="256" value={training.factor_dim} onChange={(e) => setTraining({...training, factor_dim: Number(e.target.value)})}/></label>}
-      </div><div className="config-actions"><span>复用当前实时用户与物品特征</span><button className="primary" disabled={!!busy} onClick={() => void trainAndDeploy()}>{busy === "train" ? "提交中…" : "训练并更新部署"}</button></div></section>
+      </div><div className="config-actions"><span>{targetType === "item" ? "用户特征 + 候选物品特征" : "源用户特征 + 候选用户特征"}</span><button className="primary" disabled={!!busy} onClick={() => void trainAndDeploy()}>{busy === "train" ? "提交中…" : "训练并更新部署"}</button></div></section>
     <section className="graph-status"><div><span>ACTIVE VERSION</span><strong>{data?.active_version || "未发布"}</strong></div><div><span>SCENE</span><code>{scene}</code></div><div><span>RETAINED</span><strong>{data?.releases.length || 0}</strong></div></section>
     <section className="panel model-releases"><div className="panel-title"><span>模型版本与评估指标</span><button disabled={!data?.active_version || !!busy} onClick={() => void activate()}>回滚上一版本</button></div>
       <div className="model-release-list">{data?.releases.map((release) => { const active = release.version === data.active_version; return <article className={active ? "active" : ""} key={release.version}>

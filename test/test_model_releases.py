@@ -10,7 +10,7 @@ class FakeStore(ModelReleaseStore):
 
 
 def artifact(root, scene, version, passed=True):
-    path = root / scene / version
+    path = root / "item" / scene / version
     path.mkdir(parents=True)
     (path / "lr.pth").write_bytes(b"model")
     feature = {"version": 1, "model_type": "lr", "input_dim": 7,
@@ -46,7 +46,7 @@ def test_publish_rejects_failed_evaluation(tmp_path):
 def test_publish_rejects_tampered_feature_sidecar(tmp_path):
     root = tmp_path / "artifacts"
     artifact(root, "home", "bad")
-    (root / "home" / "bad" / "lr.features.json").write_text("{}")
+    (root / "item" / "home" / "bad" / "lr.features.json").write_text("{}")
     store = FakeStore(root, tmp_path / "data")
     try:
         store.publish("home", "bad")

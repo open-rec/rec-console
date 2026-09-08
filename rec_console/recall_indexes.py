@@ -3,8 +3,10 @@
 import re
 
 
-RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i")
+RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
+                     "user-cf-u2u", "content-u2u", "user-emb-u2u")
 I2I_ALGORITHMS = ("item-cf-i2i", "content-i2i")
+U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-emb-u2u")
 
 
 class RecallIndexManager:
@@ -135,6 +137,9 @@ class RecallIndexManager:
         elif algorithm == "user-cf-u2i":
             properties.update({"user": {"type": "keyword"},
                                "item": {"type": "keyword"}})
+        elif algorithm in U2U_ALGORITHMS:
+            properties.update({"left_user": {"type": "keyword"},
+                               "right_user": {"type": "keyword"}})
         else:
             properties["item"] = {"type": "keyword"}
             if algorithm == "new":

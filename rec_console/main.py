@@ -133,11 +133,13 @@ class ServingGraphExperimentStateRequest(BaseModel):
 class ModelPublishRequest(BaseModel):
     scene: str
     version: str
+    target_type: str = Field(default="item", pattern="^(item|user)$")
 
 
 class ModelRollbackRequest(BaseModel):
     scene: str
     target_version: str | None = None
+    target_type: str = Field(default="item", pattern="^(item|user)$")
 
 
 @app.get("/api/analytics/business")
@@ -214,14 +216,14 @@ def releases(algorithm: str):
 
 
 @app.get("/api/models/releases/{scene}")
-def model_releases(scene: str):
-    return ModelReleaseStore().list(scene)
+def model_releases(scene: str, target_type: str = "item"):
+    return ModelReleaseStore().list(scene, target_type)
 
 
 @app.post("/api/models/releases/publish")
 def publish_model(request: ModelPublishRequest):
     try:
-        return ModelReleaseStore().publish(request.scene, request.version)
+        return ModelReleaseStore().publish(request.scene, request.version, request.target_type)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RuntimeError) as error:
@@ -231,7 +233,8 @@ def publish_model(request: ModelPublishRequest):
 @app.post("/api/models/releases/rollback")
 def rollback_model(request: ModelRollbackRequest):
     try:
-        return ModelReleaseStore().rollback(request.scene, request.target_version)
+        return ModelReleaseStore().rollback(request.scene, request.target_version,
+                                            request.target_type)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RuntimeError) as error:
@@ -280,7 +283,8 @@ def airflow_dags():
 def airflow_dag(dag_id: str):
     dag = _airflow("dag", dag_id)
     tasks = _airflow("dag_tasks", dag_id)
-    config = DagConfigStore().current() if dag_id == "openrec_daily_recall" else None
+    config = DagConfigStore(dag_id=dag_id).current() if dag_id in (
+        "openrec_daily_recall", "openrec_daily_user_recall") else None
     return {"dag": dag, "tasks": tasks.get("tasks", []), "config": config}
 
 
@@ -341,6 +345,39 @@ def rollback_daily_recall_config(request: ConfigRollbackRequest):
     except AirflowError as error:
         result["airflow_reparse"] = "pending"
         result["warning"] = str(error)
+    return result
+
+
+@app.get("/api/dag-configs/openrec_daily_user_recall")
+def daily_user_recall_config():
+    return DagConfigStore(dag_id="openrec_daily_user_recall").current()
+
+
+@app.post("/api/dag-configs/openrec_daily_user_recall/publish")
+def publish_daily_user_recall_config(request: DailyRecallConfigRequest):
+    try:
+        result = DagConfigStore(dag_id="openrec_daily_user_recall").publish(request.model_dump())
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        AirflowClient().reparse("openrec_daily_user_recall")
+        result["airflow_reparse"] = "requested"
+    except AirflowError as error:
+        result["airflow_reparse"] = "pending"; result["warning"] = str(error)
+    return result
+
+
+@app.post("/api/dag-configs/openrec_daily_user_recall/rollback")
+def rollback_daily_user_recall_config(request: ConfigRollbackRequest):
+    try:
+        result = DagConfigStore(dag_id="openrec_daily_user_recall").rollback(request.version)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        AirflowClient().reparse("openrec_daily_user_recall")
+        result["airflow_reparse"] = "requested"
+    except AirflowError as error:
+        result["airflow_reparse"] = "pending"; result["warning"] = str(error)
     return result
 
 
