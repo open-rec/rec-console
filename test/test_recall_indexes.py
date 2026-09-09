@@ -24,7 +24,7 @@ def test_prepare_creates_staging_index_without_touching_alias():
 
 def test_prepare_user_recall_creates_u2u_mapping():
     subject = manager()
-    subject.prepare("user-emb-u2u", "2026-08-20", "r002")
+    subject.prepare("user-als-emb", "2026-08-20", "r002")
     mapping = subject.client.indices.create.call_args.kwargs["mappings"]["properties"]
     assert set(mapping) == {"scene", "score", "left_user", "right_user"}
 

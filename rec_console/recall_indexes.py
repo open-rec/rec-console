@@ -4,9 +4,9 @@ import re
 
 
 RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
-                     "user-cf-u2u", "content-u2u", "user-emb-u2u")
+                     "user-cf-u2u", "content-u2u", "user-als-emb")
 I2I_ALGORITHMS = ("item-cf-i2i", "content-i2i")
-U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-emb-u2u")
+U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-als-emb")
 
 
 class RecallIndexManager:
