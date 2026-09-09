@@ -181,7 +181,10 @@ function graphLayout(graph: ServingGraph) {
       if (incoming.get(edge.to) === 0) queue.push(edge.to);
     });
   }
-  const trigger = graph.nodes.find((node) => node.name.toLowerCase() === "usertrigger")?.name;
+  const trigger = graph.nodes.find((node) => {
+    const normalized = node.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return normalized === "usertrigger" || normalized === "trigger";
+  })?.name;
   if (trigger) {
     level.set(trigger, 0);
     graph.nodes.forEach((node) => {
