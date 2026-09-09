@@ -45,6 +45,9 @@ GET   /api/airflow/dags/{dag_id}/runs/{run_id}/tasks/{task_id}/logs
 GET  /api/dag-configs/openrec_daily_recall
 POST /api/dag-configs/openrec_daily_recall/publish
 POST /api/dag-configs/openrec_daily_recall/rollback
+GET  /api/dag-configs/openrec_daily_user_recall
+POST /api/dag-configs/openrec_daily_user_recall/publish
+POST /api/dag-configs/openrec_daily_user_recall/rollback
 
 GET  /api/serving-graph
 POST /api/serving-graph/publish
@@ -84,9 +87,10 @@ Airflow API access, and rec-server; standalone checks rec-server only.
 This management port is reachable from the host network; the warning above applies to both modes.
 
 Cluster Compose mounts the Airflow Simple Auth password file read-only, a persistent console
-history volume, and the shared `openrec-dag-config` publication volume. Supported daily recall
-fields are cron schedule, the ordered six-algorithm recall pipeline, default revision, index retention, retry count,
-and retry delay. Airflow remains the execution and run-state source of truth.
+history volume, and the shared `openrec-dag-config` publication volume. Item and User daily DAGs
+have separate configuration histories. Supported fields include cron schedule, ordered algorithm
+pipeline, default revision, index retention, retry count, and retry delay. Airflow remains the
+execution and run-state source of truth.
 
 `SERVING_GRAPH_TOKEN` must have the same value in rec-console and rec-server. The Compose defaults
 are intended only for the example environment; override the value for a shared deployment.
