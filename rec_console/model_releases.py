@@ -70,6 +70,10 @@ class ModelReleaseStore:
             raise ValueError("model feature dimension does not match manifest: %s" % version)
         if feature_space.get("model_type") and feature_space["model_type"] != manifest.get("model_type"):
             raise ValueError("model feature type does not match manifest: %s" % version)
+        for field in ("catalog_version", "catalog_sha256"):
+            if (manifest.get(field) is not None and
+                    feature_space.get(field) != manifest.get(field)):
+                raise ValueError("model %s does not match feature sidecar: %s" % (field, version))
         return manifest
 
     def _load(self, scene, manifest):

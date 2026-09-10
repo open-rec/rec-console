@@ -53,3 +53,19 @@ def test_publish_rejects_tampered_feature_sidecar(tmp_path):
         assert False
     except ValueError as error:
         assert "checksum" in str(error)
+
+
+def test_publish_rejects_catalog_provenance_mismatch(tmp_path):
+    root = tmp_path / "artifacts"
+    artifact(root, "home", "bad")
+    path = root / "item" / "home" / "bad" / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["catalog_version"] = 1
+    manifest["catalog_sha256"] = "different"
+    path.write_text(json.dumps(manifest))
+    store = FakeStore(root, tmp_path / "data")
+    try:
+        store.publish("home", "bad")
+        assert False
+    except ValueError as error:
+        assert "catalog_version" in str(error) or "catalog_sha256" in str(error)
