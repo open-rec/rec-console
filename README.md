@@ -97,14 +97,16 @@ are intended only for the example environment; override the value for a shared d
 
 The Rank Model module can submit LR or FM training through `openrec_rank_model`, then lists
 evaluated immutable releases and their model type, AUC, sample count, feature dimension, and gate
-result. The DAG deploys releases that pass the gate; manual publish asks rank-engine to load the complete artifact before updating
+result. The DAG only retains releases that pass the gate; publication is a separate action.
+Manual publish asks rank-engine to load the complete artifact before updating
 the console's active record; rollback uses the same atomic activation path and retains activation
 history under the console data volume.
 
 New releases also expose the model-specific Feature Set, catalog version, fitted input dimension,
 and FeatureSpace SHA-256. Publish and rollback validate the sidecar checksum, declared model type,
-and dimension before activation. The console and rank-engine consume only the fitted sidecar stored
-with that model release; the training-time global catalog is not an online dependency.
+and dimension before activation. Rank-engine uses the fitted sidecar stored with the release and
+checks its selected feature definitions against the catalog packaged in rec-algorithm. It does
+not query a live catalog service or refit encoders during deployment.
 
 The Data Analysis module submits a four-core Spark aggregation over the selected Hive event
 partitions and caches identical queries for five minutes. It reports PV/UV CTR, PV/UV CVR, active
@@ -174,3 +176,14 @@ Upgrade the algorithm package, rank-engine, console and training DAG together.
 Existing per-scene publication records are superseded by one record per target;
 re-publish the intended version after upgrade. Existing artifact directories and
 rank-engine restart state are preserved. Standalone does not enable these pages.
+
+### Offline training service boundary
+
+Feature catalog and selection validation use `REC_ALGORITHM_URL` (`/features`
+and `/features/validate`). Training submission triggers Airflow, whose Spark job
+in rec-algorithm prepares samples, trains and evaluates the model. Rank-engine
+is not required for catalog access, training submission or training completion.
+`RANK_ENGINE_URL` is used only for online runtime, activation and rollback.
+Deploy the updated console with the companion algorithm runner and rank-engine;
+the old rank-engine training/catalog endpoints have been removed. Registering a
+training result never changes the active online model.

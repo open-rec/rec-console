@@ -20,7 +20,7 @@ def test_training_validates_and_forwards_selection_without_publishing(
         assert payload["feature_selection"] == selection
         return selection
 
-    monkeypatch.setattr(ModelTraining, "rank_request", validate)
+    monkeypatch.setattr(ModelTraining, "algorithm_request", validate)
     monkeypatch.setattr(
         "rec_console.model_training.AirflowClient.trigger",
         lambda self, dag, conf: (
@@ -45,7 +45,7 @@ def test_training_validation_failure_does_not_trigger_airflow(monkeypatch):
     def reject(*args):
         raise ValueError("unsupported feature")
 
-    monkeypatch.setattr(ModelTraining, "rank_request", reject)
+    monkeypatch.setattr(ModelTraining, "algorithm_request", reject)
     monkeypatch.setattr(
         "rec_console.model_training.AirflowClient.trigger",
         lambda *args: pytest.fail("must not trigger"),
@@ -62,3 +62,17 @@ def test_training_rejects_unrecognized_publication_option():
             feature_selection={},
             publish=True,
         )
+
+
+def test_training_catalog_uses_offline_gateway(monkeypatch):
+    service = ModelTraining()
+    calls = []
+    monkeypatch.setenv("RANK_ENGINE_URL", "http://offline-rank:8123")
+    monkeypatch.setenv("REC_ALGORITHM_URL", "http://offline-runner:8090")
+    monkeypatch.setattr(
+        service,
+        "_request",
+        lambda base, path, payload=None: calls.append((base, path)) or {},
+    )
+    service.catalog()
+    assert calls == [("http://offline-runner:8090", "/features")]
