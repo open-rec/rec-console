@@ -153,3 +153,24 @@ npm run dev
 The production Dockerfile builds the frontend first and serves its static output from the FastAPI
 application. CI tests Python 3.12 and builds the frontend with Node.js 22; the runtime build stage
 currently uses Node.js 20.
+
+
+### Global features and model lifecycle (cluster)
+
+Rank Model contains global feature, offline training and online deployment tabs.
+The catalog shows declared implementation capabilities; it does not claim that all
+entities have fresh data. Training selects supported source-user and candidate
+features, then submits `openrec_rank_model` with parameters and an evaluation gate.
+The default `global` training scope includes all scenes. Item and user ranking each
+have one active global model, independent of the training scope.
+
+Deployment selects a retained immutable version; feature selection cannot be edited
+at publication. The page distinguishes the console's publication record from the
+rank-engine's actual loaded model. Rollback loads another retained version with its
+original encoders. New feature/model implementations and backfills remain manual
+engineering work outside the UI.
+
+Upgrade the algorithm package, rank-engine, console and training DAG together.
+Existing per-scene publication records are superseded by one record per target;
+re-publish the intended version after upgrade. Existing artifact directories and
+rank-engine restart state are preserved. Standalone does not enable these pages.

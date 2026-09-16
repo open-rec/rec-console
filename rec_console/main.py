@@ -19,6 +19,7 @@ from rec_console.dag_configs import DagConfigStore
 from rec_console.entity_queries import EntityQueryClient, EntityQueryError
 from rec_console.recall_indexes import RecallIndexManager
 from rec_console.model_releases import ModelReleaseStore
+from rec_console.model_training import ModelTraining
 from rec_console.serving_graphs import RecServerError, ServingGraphStore
 
 
@@ -26,8 +27,10 @@ def _manager():
     verify = os.environ.get("ES_VERIFY_CERTS", "false").lower() == "true"
     client = Elasticsearch(
         [os.environ.get("ES_HOST", "https://elasticsearch:9200")],
-        basic_auth=(os.environ.get("ES_USER", "elastic"),
-                    os.environ.get("ES_PASSWORD", "openrec-es-password")),
+        basic_auth=(
+            os.environ.get("ES_USER", "elastic"),
+            os.environ.get("ES_PASSWORD", "openrec-es-password"),
+        ),
         verify_certs=verify,
     )
     return RecallIndexManager(client)
@@ -54,7 +57,9 @@ async def reject_disabled_features(request: Request, call_next):
     for prefix, feature in FEATURE_PATHS.items():
         if request.url.path.startswith(prefix) and not features[feature]:
             return Response(
-                content='{"detail":"feature is only supported in cluster mode"}',
+                content=(
+                    '{"detail":"feature is only supported in cluster mode"}'
+                ),
                 status_code=404,
                 media_type="application/json",
             )
@@ -131,9 +136,25 @@ class ServingGraphExperimentStateRequest(BaseModel):
 
 
 class ModelPublishRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     scene: str
     version: str
     target_type: str = Field(default="item", pattern="^(item|user)$")
+
+
+class ModelTrainingRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    business_date: date
+    revision: str = Field(pattern="^r[0-9]{3,}$")
+    scene: str = Field(default="global", pattern="^[A-Za-z0-9_-]+$")
+    model_type: str = Field(default="lr", pattern="^(lr|fm)$")
+    target_type: str = Field(default="item", pattern="^(item|user)$")
+    epochs: int = Field(default=5, ge=1, le=100)
+    batch_size: int = Field(default=256, ge=1, le=65536)
+    validation_ratio: float = Field(default=0.2, gt=0, lt=1)
+    factor_dim: int = Field(default=8, ge=1, le=256)
+    min_auc: float = Field(default=0, ge=0, le=1)
+    feature_selection: dict[str, list[str]]
 
 
 class ModelRollbackRequest(BaseModel):
@@ -143,14 +164,21 @@ class ModelRollbackRequest(BaseModel):
 
 
 @app.get("/api/analytics/business")
-def business_analytics(date_from: date, date_to: date, scene: str = "", refresh: bool = False):
+def business_analytics(
+    date_from: date, date_to: date, scene: str = "", refresh: bool = False
+):
     if date_from > date_to:
-        raise HTTPException(status_code=400, detail="date_from must not be after date_to")
+        raise HTTPException(
+            status_code=400, detail="date_from must not be after date_to"
+        )
     if (date_to - date_from).days > 366:
-        raise HTTPException(status_code=400, detail="date range must not exceed 366 days")
+        raise HTTPException(
+            status_code=400, detail="date range must not exceed 366 days"
+        )
     try:
-        return AnalyticsClient().query(date_from.isoformat(), date_to.isoformat(),
-                                       scene.strip(), refresh)
+        return AnalyticsClient().query(
+            date_from.isoformat(), date_to.isoformat(), scene.strip(), refresh
+        )
     except AnalyticsError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
@@ -182,8 +210,10 @@ def health():
             dependencies["airflow"] = "ready"
         return {"status": "ok", "mode": config["mode"], **dependencies}
     except Exception as error:
-        raise HTTPException(status_code=503, detail="Console dependency is unavailable: %s" % error) \
-            from error
+        raise HTTPException(
+            status_code=503,
+            detail="Console dependency is unavailable: %s" % error,
+        ) from error
     finally:
         if manager:
             manager.client.close()
@@ -191,13 +221,20 @@ def health():
 
 @app.post("/api/recall/releases/prepare")
 def prepare(request: PrepareRequest):
-    return _call("prepare", request.algorithm, request.business_date, request.revision)
+    return _call(
+        "prepare", request.algorithm, request.business_date, request.revision
+    )
 
 
 @app.post("/api/recall/releases/activate")
 def activate(request: ActivateRequest):
-    return _call("activate", request.algorithm, request.index,
-                 request.expected_documents, request.max_index_versions)
+    return _call(
+        "activate",
+        request.algorithm,
+        request.index,
+        request.expected_documents,
+        request.max_index_versions,
+    )
 
 
 @app.post("/api/recall/releases/rollback")
@@ -217,13 +254,47 @@ def releases(algorithm: str):
 
 @app.get("/api/models/releases/{scene}")
 def model_releases(scene: str, target_type: str = "item"):
-    return ModelReleaseStore().list(scene, target_type)
+    try:
+        return ModelReleaseStore().list(scene, target_type)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _model_training(method, *args):
+    try:
+        return getattr(ModelTraining(), method)(*args)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (OSError, RuntimeError) as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+
+
+@app.get("/api/models/features")
+def model_features():
+    return _model_training("catalog")
+
+
+@app.get("/api/models/runtime")
+def model_runtime():
+    return _model_training("runtime")
+
+
+@app.post("/api/models/training")
+def model_training(request: ModelTrainingRequest):
+    return _model_training("submit", request.model_dump(mode="json"))
+
+
+@app.get("/api/models/training")
+def model_training_runs():
+    return _model_training("runs")
 
 
 @app.post("/api/models/releases/publish")
 def publish_model(request: ModelPublishRequest):
     try:
-        return ModelReleaseStore().publish(request.scene, request.version, request.target_type)
+        return ModelReleaseStore().publish(
+            request.scene, request.version, request.target_type
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RuntimeError) as error:
@@ -233,8 +304,9 @@ def publish_model(request: ModelPublishRequest):
 @app.post("/api/models/releases/rollback")
 def rollback_model(request: ModelRollbackRequest):
     try:
-        return ModelReleaseStore().rollback(request.scene, request.target_version,
-                                            request.target_type)
+        return ModelReleaseStore().rollback(
+            request.scene, request.target_version, request.target_type
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RuntimeError) as error:
@@ -263,8 +335,12 @@ def query_item(item_id: str):
 
 @app.get("/api/entities/events")
 def query_events(user_id: str, scene: str, event_type: str):
-    return {"user_id": user_id, "scene": scene, "event_type": event_type,
-            "events": _entity_query("events", user_id, scene, event_type)}
+    return {
+        "user_id": user_id,
+        "scene": scene,
+        "event_type": event_type,
+        "events": _entity_query("events", user_id, scene, event_type),
+    }
 
 
 def _airflow(method, *args):
@@ -283,8 +359,11 @@ def airflow_dags():
 def airflow_dag(dag_id: str):
     dag = _airflow("dag", dag_id)
     tasks = _airflow("dag_tasks", dag_id)
-    config = DagConfigStore(dag_id=dag_id).current() if dag_id in (
-        "openrec_daily_recall", "openrec_daily_user_recall") else None
+    config = (
+        DagConfigStore(dag_id=dag_id).current()
+        if dag_id in ("openrec_daily_recall", "openrec_daily_user_recall")
+        else None
+    )
     return {"dag": dag, "tasks": tasks.get("tasks", []), "config": config}
 
 
@@ -309,7 +388,9 @@ def airflow_tasks(dag_id: str, run_id: str):
 
 
 @app.get("/api/airflow/dags/{dag_id}/runs/{run_id}/tasks/{task_id}/logs")
-def airflow_task_logs(dag_id: str, run_id: str, task_id: str, try_number: int = 1):
+def airflow_task_logs(
+    dag_id: str, run_id: str, task_id: str, try_number: int = 1
+):
     return _airflow("logs", dag_id, run_id, task_id, max(try_number, 1))
 
 
@@ -356,28 +437,34 @@ def daily_user_recall_config():
 @app.post("/api/dag-configs/openrec_daily_user_recall/publish")
 def publish_daily_user_recall_config(request: DailyRecallConfigRequest):
     try:
-        result = DagConfigStore(dag_id="openrec_daily_user_recall").publish(request.model_dump())
+        result = DagConfigStore(dag_id="openrec_daily_user_recall").publish(
+            request.model_dump()
+        )
     except (OSError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     try:
         AirflowClient().reparse("openrec_daily_user_recall")
         result["airflow_reparse"] = "requested"
     except AirflowError as error:
-        result["airflow_reparse"] = "pending"; result["warning"] = str(error)
+        result["airflow_reparse"] = "pending"
+        result["warning"] = str(error)
     return result
 
 
 @app.post("/api/dag-configs/openrec_daily_user_recall/rollback")
 def rollback_daily_user_recall_config(request: ConfigRollbackRequest):
     try:
-        result = DagConfigStore(dag_id="openrec_daily_user_recall").rollback(request.version)
+        result = DagConfigStore(dag_id="openrec_daily_user_recall").rollback(
+            request.version
+        )
     except (OSError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     try:
         AirflowClient().reparse("openrec_daily_user_recall")
         result["airflow_reparse"] = "requested"
     except AirflowError as error:
-        result["airflow_reparse"] = "pending"; result["warning"] = str(error)
+        result["airflow_reparse"] = "pending"
+        result["warning"] = str(error)
     return result
 
 
@@ -402,7 +489,9 @@ def publish_serving_graph(request: ServingGraphPublishRequest):
 @app.post("/api/serving-graph/rollback")
 def rollback_serving_graph(request: ConfigRollbackRequest):
     try:
-        return ServingGraphStore().rollback(request.version, getattr(request, "experiment", "default"))
+        return ServingGraphStore().rollback(
+            request.version, getattr(request, "experiment", "default")
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (OSError, RecServerError) as error:
@@ -412,7 +501,9 @@ def rollback_serving_graph(request: ConfigRollbackRequest):
 @app.put("/api/serving-graph/routing")
 def configure_serving_graph_routing(request: ServingGraphRoutingRequest):
     try:
-        return ServingGraphStore().client.configure_routing(request.model_dump())
+        return ServingGraphStore().client.configure_routing(
+            request.model_dump()
+        )
     except RecServerError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
@@ -427,9 +518,12 @@ def create_serving_graph_experiment(request: ServingGraphExperimentRequest):
 
 @app.put("/api/serving-graph/experiments/{experiment}/enabled")
 def set_serving_graph_experiment_enabled(
-        experiment: str, request: ServingGraphExperimentStateRequest):
+    experiment: str, request: ServingGraphExperimentStateRequest
+):
     try:
-        return ServingGraphStore().set_experiment_enabled(experiment, request.enabled)
+        return ServingGraphStore().set_experiment_enabled(
+            experiment, request.enabled
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RecServerError as error:
@@ -446,7 +540,10 @@ def delete_serving_graph_experiment(experiment: str):
 
 @app.api_route("/grafana/{path:path}", methods=["GET", "POST"])
 async def grafana_proxy(path: str, request: Request):
-    """Expose Grafana through the console origin so remote browsers never use loopback URLs."""
+    """
+    Expose Grafana through the console origin so remote browsers never use
+    loopback URLs.
+    """
     base = os.environ.get("GRAFANA_URL", "http://grafana:3000").rstrip("/")
     query = ("?" + request.url.query) if request.url.query else ""
     body = await request.body()
@@ -454,21 +551,38 @@ async def grafana_proxy(path: str, request: Request):
         "%s/grafana/%s%s" % (base, path, query),
         data=body or None,
         method=request.method,
-        headers={"Accept": request.headers.get("accept", "*/*"),
-                 "Content-Type": request.headers.get("content-type", "application/json")},
+        headers={
+            "Accept": request.headers.get("accept", "*/*"),
+            "Content-Type": request.headers.get(
+                "content-type", "application/json"
+            ),
+        },
     )
     try:
         with urllib.request.urlopen(upstream, timeout=30) as result:
-            headers = {name: value for name, value in result.headers.items()
-                       if name.lower() in ("content-type", "cache-control", "location")}
-            return Response(result.read(), status_code=result.status, headers=headers)
+            headers = {
+                name: value
+                for name, value in result.headers.items()
+                if name.lower()
+                in ("content-type", "cache-control", "location")
+            }
+            return Response(
+                result.read(), status_code=result.status, headers=headers
+            )
     except urllib.error.HTTPError as error:
-        return Response(error.read(), status_code=error.code,
-                        media_type=error.headers.get_content_type())
+        return Response(
+            error.read(),
+            status_code=error.code,
+            media_type=error.headers.get_content_type(),
+        )
     except urllib.error.URLError as error:
-        raise HTTPException(status_code=502, detail="Grafana is unavailable: %s" % error) from error
+        raise HTTPException(
+            status_code=502, detail="Grafana is unavailable: %s" % error
+        ) from error
 
 
 STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="console-ui")
+    app.mount(
+        "/", StaticFiles(directory=STATIC_DIR, html=True), name="console-ui"
+    )

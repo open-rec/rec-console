@@ -128,3 +128,26 @@ button.primary { color: #111514; background: #dfff50; border-color: #b8d83d; fon
 .analytics-filter { display: grid; grid-template-columns: 1fr 1fr 1.2fr auto; gap: 14px; align-items: end; padding: 17px 19px; margin-bottom: 18px; }.analytics-filter label { display: flex; flex-direction: column; gap: 7px; color: #666b67; font-size: 10px; }.analytics-filter input { min-height: 38px; border: 1px solid #d3d2ca; border-radius: 7px; padding: 8px 10px; background: #fff; font: 10px "DM Mono", monospace; }.analytics-filter button { min-height: 38px; padding: 0 20px; border-radius: 7px; cursor: pointer; }.analytics-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }.analytics-cards article { min-height: 126px; padding: 18px 20px; border: 1px solid #d8d6ce; border-radius: 11px; background: #faf9f4; display: flex; flex-direction: column; }.analytics-cards article.gmv { background: #f1f6df; border-color: #cbd7a1; }.analytics-cards span { color: #777d78; font: 9px "DM Mono", monospace; letter-spacing: 1px; }.analytics-cards strong { margin: 13px 0 10px; font-size: 28px; letter-spacing: -1px; }.analytics-cards small { margin-top: auto; color: #8b908c; font-size: 9px; line-height: 1.45; }.trend-list { padding: 11px 18px; }.trend-row { min-height: 42px; display: grid; grid-template-columns: 92px minmax(180px,1fr) 90px 65px; gap: 13px; align-items: center; border-bottom: 1px solid #e4e2db; }.trend-row code { font: 9px "DM Mono", monospace; }.trend-row > span, .trend-row > strong { text-align: right; font-size: 9px; }.trend-bars { position: relative; height: 18px; }.trend-bars i, .trend-bars b { position: absolute; left: 0; display: block; min-width: 1px; border-radius: 2px; }.trend-bars i { top: 1px; height: 8px; background: #c9d4b4; }.trend-bars b { bottom: 1px; height: 6px; background: #809f2c; }.trend-legend { padding: 12px 18px 16px; display: flex; gap: 16px; align-items: center; color: #7e837f; font-size: 9px; }.trend-legend span { display: flex; gap: 5px; align-items: center; }.trend-legend i, .trend-legend b { width: 14px; height: 6px; border-radius: 2px; background: #c9d4b4; }.trend-legend b { background: #809f2c; }.trend-legend em { margin-left: auto; font-style: normal; }
 @media (max-width: 1050px) { .analytics-filter { grid-template-columns: repeat(2, 1fr); }.analytics-cards { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 620px) { .analytics-filter, .analytics-cards { grid-template-columns: 1fr; }.trend-row { grid-template-columns: 76px 1fr 55px; }.trend-row > span { display: none; }.trend-legend em { display: none; } }
+
+.model-tabs { display: flex; gap: 10px; margin: 0 0 22px; }
+.model-tabs button { padding: 10px 18px; border: 1px solid #cfcec6; border-radius: 8px; background: white; cursor: pointer; }
+.model-tabs .selected { background: #e5efd9; border-color: #8da73c; }
+.feature-catalog > p, .training-runs > p { margin: 18px; color: #666; font-size: 13px; }
+.feature-catalog { overflow-x: auto; }
+.feature-catalog table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.feature-catalog th, .feature-catalog td { padding: 12px 18px; text-align: left; border-bottom: 1px solid #e0ded7; }
+.feature-catalog td small { display: block; margin-top: 5px; max-width: 450px; color: #777; }
+.model-training-fields { border: 0; padding: 0; min-width: 0; }
+.feature-selection { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px; }
+.feature-selection fieldset { border: 1px solid #deddd5; border-radius: 8px; padding: 14px; min-width: 0; }
+.feature-selection label { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; overflow-wrap: anywhere; }
+.training-runs > div:not(.panel-title) { display: flex; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #eee; font-size: 12px; overflow-wrap: anywhere; }
+.model-version-list article { padding: 18px; border-bottom: 1px solid #deddd5; }
+.model-version-list article.active { background: #f3f7e7; }
+.model-version-title { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 13px; }
+.model-version-title button { margin-left: auto; }
+.model-version-list details { margin-top: 14px; font-size: 12px; }
+.model-version-list details p { line-height: 1.8; overflow-wrap: anywhere; }
+.model-version-list summary { cursor: pointer; }
+.model-version-list pre { white-space: pre-wrap; }
+@media (max-width: 850px) { .feature-selection { grid-template-columns: 1fr; } .training-runs > div:not(.panel-title) { flex-wrap: wrap; } }
