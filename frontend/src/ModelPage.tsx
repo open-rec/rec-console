@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Target = "item" | "user";
-type Kind = "lr" | "fm";
+type Kind = "lr" | "fm" | "lightgbm";
 type Selection = { user: string[]; candidate: string[] };
-type Feature = { id: string; name: string; entity: string; description: string; value_type: string; definition_version: number; status: string; materialization: { online: boolean; offline: boolean } };
-type Catalog = { catalog_version: number; features: Feature[]; models: Record<Kind, Record<Target, Selection>> };
+type Feature = { id: string; name: string; entity: string; family: string; group: string; description: string; value_type: string; definition_version: number; status: string; scenes?: string[]; materialization: { online: boolean; offline: boolean } };
+type Taxon = { id: string; label: string; description?: string };
+type Catalog = { catalog_version: number; features: Feature[]; taxonomy: { families: Taxon[]; scenes: Taxon[] }; models: Record<Kind, Record<Target, Selection>> };
 type Release = { version: string; scene: string; model_type: Kind; target_type: Target; feature_selection?: Selection; feature_set?: string; input_dim?: number; training_config?: Record<string, unknown>; metrics?: { auc?: number; samples?: number }; gate?: { passed: boolean } };
 type Releases = { active_version: string | null; active: Release | null; releases: Release[] };
 type Runtime = { ready: boolean; model_loaded: boolean; user_model_loaded: boolean; model?: {path: string}; user_model?: {path: string} };
@@ -33,6 +34,8 @@ export default function ModelPage() {
   const key = `${training.model_type}:${target}`;
   const supported = catalog?.models[training.model_type][target];
   const selected = selections[key] || supported || { user: [], candidate: [] };
+  const featureById = new Map(catalog?.features.map((feature) => [feature.id, feature]) || []);
+  const families = catalog?.taxonomy.families || [];
   const report = (reason: unknown) => setError(reason instanceof Error ? reason.message : "操作失败");
   const generation = useRef(0);
   const load = useCallback(async () => {
@@ -84,11 +87,11 @@ export default function ModelPage() {
     <div className="model-tabs">{([ ["features", "全局特征中心"], ["training", "离线训练"], ["deployment", "在线部署"] ] as const).map(([value, label]) => <button key={value} className={tab === value ? "selected" : ""} onClick={() => setTab(value)}>{label}</button>)}</div>
     {error && <div role="alert" className="notice error page-notice">{error}</div>}{message && <div role="status" className="notice success page-notice">{message}</div>}
     {tab === "features" && <section className="panel feature-catalog"><div className="panel-title"><span>全局特征目录 · v{catalog?.catalog_version || "—"}</span><input aria-label="搜索特征" placeholder="搜索特征名称" value={query} onChange={(event) => setQuery(event.target.value)}/></div><p>展示已声明的计算与模型支持能力。新增特征需先完成工程实现和验证；数据是否可用会在部署加载时检查。</p>
-      <table><thead><tr><th>特征</th><th>定义版本 / 类型</th><th>离线 / 在线实现</th><th>支持模型</th></tr></thead><tbody>{catalog?.features.filter((feature) => feature.id.includes(query) || feature.description.includes(query)).map((feature) => <tr key={feature.id}><td><strong>{feature.id}</strong><small>{feature.description}</small></td><td>v{feature.definition_version} · {feature.value_type}</td><td>{feature.materialization.offline ? "已实现" : "未实现"} / {feature.materialization.online ? "已实现" : "未实现"}</td><td>{(["lr", "fm"] as Kind[]).filter((model) => Object.values(catalog.models[model]).some((roles) => [...roles.user, ...roles.candidate].includes(feature.id))).map((model) => model.toUpperCase()).join(" / ") || "暂无"}</td></tr>)}</tbody></table>
+      <table><thead><tr><th>特征</th><th>实体 / 类别</th><th>定义版本 / 类型</th><th>离线 / 在线实现</th><th>支持模型</th></tr></thead><tbody>{catalog?.features.filter((feature) => feature.id.includes(query) || feature.description.includes(query)).sort((a, b) => `${a.family}:${a.entity}:${a.id}`.localeCompare(`${b.family}:${b.entity}:${b.id}`)).map((feature) => <tr key={feature.id}><td><strong>{feature.id}</strong><small>{feature.description}</small></td><td>{feature.entity} · {families.find((family) => family.id === feature.family)?.label || feature.family}</td><td>v{feature.definition_version} · {feature.value_type}</td><td>{feature.materialization.offline ? "已实现" : "未实现"} / {feature.materialization.online ? "已实现" : "未实现"}</td><td>{(["lr", "fm", "lightgbm"] as Kind[]).filter((model) => Object.values(catalog.models[model]).some((roles) => [...roles.user, ...roles.candidate].includes(feature.id))).map((model) => model.toUpperCase()).join(" / ") || "暂无"}</td></tr>)}</tbody></table>
     </section>}
     {tab === "training" && <>
       <section className="panel config-panel"><div className="panel-title"><span>创建离线训练任务</span><small>生成版本后手动部署</small></div><fieldset disabled={busy} className="model-training-fields"><div className="config-grid">
-        <label>模型类型<select value={training.model_type} onChange={(event) => setTraining({ ...training, model_type: event.target.value as Kind })}><option value="lr">LR</option><option value="fm">FM</option></select></label>
+        <label>模型类型<select value={training.model_type} onChange={(event) => setTraining({ ...training, model_type: event.target.value as Kind })}><option value="lr">LR</option><option value="fm">FM</option><option value="lightgbm">LightGBM</option></select></label>
         <label>业务日期<input type="date" value={training.business_date} onChange={(event) => setTraining({ ...training, business_date: event.target.value })}/></label>
         <label>版本修订号<input value={training.revision} onChange={(event) => setTraining({ ...training, revision: event.target.value })}/></label>
         <label>训练场景范围<input value={training.scene} onChange={(event) => setTraining({ ...training, scene: event.target.value })}/><small>global 使用全部场景；部署对该排序目标全局生效</small></label>
@@ -97,7 +100,7 @@ export default function ModelPage() {
         <label>验证集比例<input type="number" min="0.01" max="0.99" step="0.01" value={training.validation_ratio} onChange={(event) => setTraining({ ...training, validation_ratio: Number(event.target.value) })}/></label>
         <label>最低 AUC<input type="number" min="0" max="1" step="0.01" value={training.min_auc} onChange={(event) => setTraining({ ...training, min_auc: Number(event.target.value) })}/></label>
         {training.model_type === "fm" && <label>FM 隐向量维度<input type="number" min="1" max="256" value={training.factor_dim} onChange={(event) => setTraining({ ...training, factor_dim: Number(event.target.value) })}/></label>}
-      </div><div className="feature-selection">{(["user", "candidate"] as const).map((role) => <fieldset key={role}><legend>{role === "user" ? "源用户特征" : target === "item" ? "候选物品特征" : "候选用户特征"}（{selected[role].length}）</legend>{supported?.[role].map((id) => <label key={id}><input type="checkbox" checked={selected[role].includes(id)} onChange={(event) => toggle(role, id, event.target.checked)}/>{id}</label>)}</fieldset>)}</div></fieldset>
+      </div><div className="feature-selection">{(["user", "candidate"] as const).map((role) => <fieldset key={role}><legend>{role === "user" ? "源用户特征" : target === "item" ? "候选物品特征" : "候选用户特征"}（{selected[role].length}）</legend>{families.map((family) => { const ids = supported?.[role].filter((id) => featureById.get(id)?.family === family.id) || []; if (!ids.length) return null; return <details className="feature-family" key={family.id} open={family.id === "attribute" || family.id === "statistical"}><summary>{family.label}<small>{family.description}</small><span>{ids.filter((id) => selected[role].includes(id)).length}/{ids.length}</span></summary>{ids.map((id) => <label key={id} title={featureById.get(id)?.description}><input type="checkbox" checked={selected[role].includes(id)} onChange={(event) => toggle(role, id, event.target.checked)}/><span>{featureById.get(id)?.name || id}<small>{id}</small></span></label>)}</details>; })}</fieldset>)}</div></fieldset>
       {unsupported && <p role="alert">复制的版本包含当前不再支持的特征，请重新选择配置。</p>}
       <div className="config-actions"><span>每侧至少选择一个特征；输入编码在训练时确定并随版本保存。</span><button className="primary" disabled={busy || !catalog || !!unsupported || !selected.user.length || !selected.candidate.length} onClick={() => void train()}>{busy ? "提交中…" : "开始训练"}</button></div></section>
       <section className="panel training-runs"><div className="panel-title"><span>最近训练任务</span><small>每 10 秒刷新</small></div>{runs.filter((run) => (run.conf?.target_type || "item") === target).map((run) => <div key={run.dag_run_id}><code>{run.dag_run_id}</code><span>{run.conf?.model_type?.toUpperCase()} · {run.conf?.revision}</span><strong>{run.state}</strong></div>)}{!runs.length && <p>暂无训练任务</p>}</section>

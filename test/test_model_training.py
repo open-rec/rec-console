@@ -64,6 +64,16 @@ def test_training_rejects_unrecognized_publication_option():
         )
 
 
+def test_training_request_accepts_lightgbm():
+    request = ModelTrainingRequest(
+        business_date="2026-09-16",
+        revision="r123",
+        model_type="lightgbm",
+        feature_selection={"user": ["user.age"], "candidate": ["item.weight"]},
+    )
+    assert request.model_type == "lightgbm"
+
+
 def test_training_catalog_uses_offline_gateway(monkeypatch):
     service = ModelTraining()
     calls = []

@@ -147,7 +147,7 @@ class ModelTrainingRequest(BaseModel):
     business_date: date
     revision: str = Field(pattern="^r[0-9]{3,}$")
     scene: str = Field(default="global", pattern="^[A-Za-z0-9_-]+$")
-    model_type: str = Field(default="lr", pattern="^(lr|fm)$")
+    model_type: str = Field(default="lr", pattern="^(lr|fm|lightgbm)$")
     target_type: str = Field(default="item", pattern="^(item|user)$")
     epochs: int = Field(default=5, ge=1, le=100)
     batch_size: int = Field(default=256, ge=1, le=65536)

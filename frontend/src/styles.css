@@ -141,6 +141,11 @@ button.primary { color: #111514; background: #dfff50; border-color: #b8d83d; fon
 .feature-selection { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 18px; }
 .feature-selection fieldset { border: 1px solid #deddd5; border-radius: 8px; padding: 14px; min-width: 0; }
 .feature-selection label { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 12px; overflow-wrap: anywhere; }
+.feature-family { border-top: 1px solid #eceae3; padding: 9px 0; }
+.feature-family summary { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: baseline; cursor: pointer; font-weight: 600; }
+.feature-family summary small, .feature-family label small { color: #777; font-weight: 400; }
+.feature-family summary span { font-variant-numeric: tabular-nums; color: #666; }
+.feature-family label > span { display: grid; gap: 2px; }
 .training-runs > div:not(.panel-title) { display: flex; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #eee; font-size: 12px; overflow-wrap: anywhere; }
 .model-version-list article { padding: 18px; border-bottom: 1px solid #deddd5; }
 .model-version-list article.active { background: #f3f7e7; }
