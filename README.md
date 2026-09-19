@@ -95,7 +95,7 @@ execution and run-state source of truth.
 `SERVING_GRAPH_TOKEN` must have the same value in rec-console and rec-server. The Compose defaults
 are intended only for the example environment; override the value for a shared deployment.
 
-The Rank Model module can submit LR or FM training through `openrec_rank_model`, then lists
+The Rank Model module can submit LR, FM, or LightGBM training through `openrec_rank_model`, then lists
 evaluated immutable releases and their model type, AUC, sample count, feature dimension, and gate
 result. The DAG only retains releases that pass the gate; publication is a separate action.
 Manual publish asks rank-engine to load the complete artifact before updating
