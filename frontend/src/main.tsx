@@ -6,7 +6,7 @@ import "./styles.css";
 type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i";
 type DailyAlgorithm = "hot" | "new" | "item_cf_i2i" | "content_i2i" | "user_cf_u2i" | "item_seq_emb"
   | "user_cf_u2u" | "content_u2u" | "user_emb_u2u";
-type Release = { index: string; active: boolean; documents: number };
+type Release = { index: string; active: boolean; published: boolean; documents: number };
 type ReleaseSet = {
   algorithm: Algorithm;
   active_indexes: string[];
@@ -629,7 +629,7 @@ function App() {
 
   const current = data[selected];
   const active = current?.releases.find((release) => release.active);
-  const previous = current?.releases.find((release) => !release.active);
+  const previous = current?.releases.find((release) => !release.active && release.published);
   const totalIndexes = Object.values(data).reduce((sum, item) => sum + item.indexes.length, 0);
 
   return (
@@ -693,10 +693,10 @@ function App() {
                   <h3>{release.index}</h3><p>{shortDate(release.index)}</p></div></div>
                 <div className="documents"><strong>{release.documents.toLocaleString()}</strong><span>documents</span></div>
                 <div className={release.active ? "badge online" : "badge standby"}>
-                  <span />{release.active ? "ONLINE" : "STANDBY"}
+                  <span />{release.active ? "ONLINE" : release.published ? "STANDBY" : "STAGING"}
                 </div>
                 {release.active ? <span className="current">当前生效</span> :
-                  <button className="switch" disabled={!!working}
+                  <button className="switch" disabled={!!working || !release.published}
                     onClick={() => void operate("switch", release.index)}>
                     {working === release.index ? "切换中…" : "切换至此版本"}
                   </button>}

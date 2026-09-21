@@ -4,10 +4,13 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+from rec_console.release_lock import release_lock
 
 
 class ModelReleaseStore:
@@ -56,6 +59,11 @@ class ModelReleaseStore:
         }
 
     def publish(self, scene, version, target_type="item"):
+        self._validate_scope(scene, target_type)
+        with release_lock(self.data_root / target_type / "release.lock"):
+            return self._publish(scene, version, target_type)
+
+    def _publish(self, scene, version, target_type="item"):
         manifest = self._manifest(scene, version, target_type)
         if not manifest.get("gate", {}).get("passed"):
             raise ValueError("model did not pass its evaluation gate")
@@ -79,6 +87,11 @@ class ModelReleaseStore:
         return dict(self.list(scene, target_type), activated=release)
 
     def rollback(self, scene, version=None, target_type="item"):
+        self._validate_scope(scene, target_type)
+        with release_lock(self.data_root / target_type / "release.lock"):
+            return self._rollback(scene, version, target_type)
+
+    def _rollback(self, scene, version=None, target_type="item"):
         listing = self.list(scene, target_type)
         active = listing["active"] or {}
         candidates = [
@@ -103,7 +116,7 @@ class ModelReleaseStore:
                 "no retained model version is available for rollback"
             )
         selected = candidates[0]
-        return self.publish(
+        return self._publish(
             selected["scene"], selected["version"], target_type
         )
 
@@ -270,6 +283,14 @@ class ModelReleaseStore:
     @staticmethod
     def _write(path, value):
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(json.dumps(value, indent=2, sort_keys=True))
-        os.replace(temporary, path)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+                json.dump(value, stream, indent=2, sort_keys=True)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)

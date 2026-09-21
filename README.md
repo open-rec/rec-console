@@ -187,3 +187,29 @@ is not required for catalog access, training submission or training completion.
 Deploy the updated console with the companion algorithm runner and rank-engine;
 the old rank-engine training/catalog endpoints have been removed. Registering a
 training result never changes the active online model.
+
+Recall rollback and manual switching accept only indexes with a successful publication marker
+(`{active-alias}-published`). This marker is committed atomically with the serving alias in
+Elasticsearch. Published indexes are write-blocked and their validated document count is stored in
+mapping `_meta.openrec_release`; rollback checks that count again. Retention protects the prior
+active release and never treats staging indexes as release history. Failed/abandoned staging
+indexes are kept for inspection and can be rebuilt using `prepare` with the same revision.
+The UI labels unpublished indexes as STAGING and disables switching to them.
+
+On upgrade, the current legacy active index is validated and retained during the next successful
+activation. Older unmarked indexes are not automatically trusted: activate them explicitly with
+an independently verified `expected_documents` count before using them as rollback targets.
+Published inactive versions are immutable; use a new revision to rebuild them.
+
+Recall mutations and rank-model publish/rollback operations use file locks in `REC_CONSOLE_DATA`
+(default `/var/lib/rec-console`). All console workers must share this data volume. The model lock
+is per target (`item` or `user`) and spans runtime loading and recording the active release;
+rollback selects its candidate under the same lock. JSON state uses unique temporary files and
+atomic replacement. This serializes concurrent operations; it is not a distributed transaction
+with rank-engine, so a process crash or an ambiguous HTTP timeout still requires checking runtime
+state before retrying publication.
+
+The optional ES lifecycle regression can be run with `OPENREC_TEST_ES_URL`,
+`OPENREC_TEST_ES_USER`, and `OPENREC_TEST_ES_PASSWORD` configured:
+`pytest -q test/integration/test_recall_lifecycle.py`. It creates and removes only its unique test
+index namespace.
