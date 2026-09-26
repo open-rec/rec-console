@@ -17,7 +17,8 @@ def test_publish_and_rollback_versioned_daily_config(tmp_path):
     rolled_back = store.rollback()
     assert rolled_back["version"] == first["version"]
     assert store.current()["config"]["algorithms"] == [
-        "hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb"]
+        "hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb",
+        "sparse"]
 
 
 @pytest.mark.parametrize("change", [

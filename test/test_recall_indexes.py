@@ -58,6 +58,17 @@ def test_prepare_user_recall_creates_u2u_mapping():
     assert set(mapping) == {"scene", "score", "left_user", "right_user"}
 
 
+def test_prepare_sparse_recall_creates_bm25_text_mapping():
+    subject = manager()
+    subject.prepare("sparse", "2026-08-20", "r002")
+    mapping = subject.client.indices.create.call_args.kwargs["mappings"]["properties"]
+    assert mapping == {
+        "scene": {"type": "keyword"},
+        "item": {"type": "keyword"},
+        "text": {"type": "text", "similarity": "BM25"},
+    }
+
+
 def test_activate_validates_then_switches_and_keeps_two_versions():
     indexes = ["openrec-recall-hot-20260820-r001",
                "openrec-recall-hot-20260819-r001",

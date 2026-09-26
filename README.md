@@ -13,6 +13,10 @@ the active alias. A React and TypeScript control interface is served from `/`; i
 structured for recommendation DAG, monitoring, Airflow automation, and rank-model modules.
 
 > The console can publish serving graphs, recall indexes, workflow configuration, and rank models.
+
+Recall releases include versioned BM25 sparse indexes. The console creates a `text` mapping with
+BM25 similarity and atomically moves the `openrec-recall-sparse-active` alias when a release is
+activated.
 > Authentication is not implemented yet. The example publishes port 8095 for local evaluation;
 > restrict it to a trusted network and replace the example `SERVING_GRAPH_TOKEN` in shared
 > environments.

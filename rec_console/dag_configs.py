@@ -9,7 +9,8 @@ from pathlib import Path
 
 DEFAULT_DAILY_RECALL = {
     "schedule": "0 2 * * *",
-    "algorithms": ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb"],
+    "algorithms": ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i",
+                   "item_seq_emb", "sparse"],
     "default_revision": "r001",
     "max_index_versions": 2,
     "retries": 1,
@@ -25,7 +26,7 @@ DEFAULTS = {"openrec_daily_recall": DEFAULT_DAILY_RECALL,
             "openrec_daily_user_recall": DEFAULT_DAILY_USER_RECALL}
 ALGORITHMS = {
     "openrec_daily_recall": ("hot", "new", "item_cf_i2i", "content_i2i",
-                             "user_cf_u2i", "item_seq_emb"),
+                             "user_cf_u2i", "item_seq_emb", "sparse"),
     "openrec_daily_user_recall": ("user_cf_u2u", "content_u2u", "user_emb_u2u"),
 }
 

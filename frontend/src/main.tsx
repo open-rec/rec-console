@@ -3,9 +3,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i";
+type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i" | "sparse";
 type DailyAlgorithm = "hot" | "new" | "item_cf_i2i" | "content_i2i" | "user_cf_u2i" | "item_seq_emb"
-  | "user_cf_u2u" | "content_u2u" | "user_emb_u2u";
+  | "user_cf_u2u" | "content_u2u" | "user_emb_u2u" | "sparse";
 type Release = { index: string; active: boolean; published: boolean; documents: number };
 type ReleaseSet = {
   algorithm: Algorithm;
@@ -14,8 +14,8 @@ type ReleaseSet = {
   releases: Release[];
 };
 
-const algorithms: Algorithm[] = ["hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i"];
-const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb"];
+const algorithms: Algorithm[] = ["hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i", "sparse"];
+const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb", "sparse"];
 const dailyUserAlgorithms: DailyAlgorithm[] = ["user_cf_u2u", "content_u2u", "user_emb_u2u"];
 const labels: Record<Algorithm | DailyAlgorithm, string> = {
   hot: "热门召回",
@@ -30,6 +30,7 @@ const labels: Record<Algorithm | DailyAlgorithm, string> = {
   user_cf_u2u: "UserCF U2U 召回",
   content_u2u: "内容 U2U 召回",
   user_emb_u2u: "User Embedding U2U 召回",
+  sparse: "BM25 稀疏召回",
 };
 
 type ModuleKey = "recall" | "entities" | "serving" | "dag" | "monitor" | "analytics" | "airflow" | "model";

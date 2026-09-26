@@ -9,7 +9,7 @@ from rec_console.release_lock import release_lock
 
 
 RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
-                     "user-cf-u2u", "content-u2u", "user-als-emb")
+                     "user-cf-u2u", "content-u2u", "user-als-emb", "sparse")
 I2I_ALGORITHMS = ("item-cf-i2i", "content-i2i")
 U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-als-emb")
 
@@ -193,6 +193,12 @@ class RecallIndexManager:
 
     @staticmethod
     def _mapping(algorithm):
+        if algorithm == "sparse":
+            return {"properties": {
+                "scene": {"type": "keyword"},
+                "item": {"type": "keyword"},
+                "text": {"type": "text", "similarity": "BM25"},
+            }}
         properties = {"scene": {"type": "keyword"}, "score": {"type": "double"}}
         if algorithm in I2I_ALGORITHMS:
             properties.update({"left_item": {"type": "keyword"},
