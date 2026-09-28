@@ -217,3 +217,14 @@ The optional ES lifecycle regression can be run with `OPENREC_TEST_ES_URL`,
 `OPENREC_TEST_ES_USER`, and `OPENREC_TEST_ES_PASSWORD` configured:
 `pytest -q test/integration/test_recall_lifecycle.py`. It creates and removes only its unique test
 index namespace.
+
+
+The feature center lists all five encoder roles (user, candidate, session,
+context, interaction). Training uses the runner's `training_models` capabilities,
+which are narrower than its `models` declarations when a producer or Spark sample
+export is not connected. Source user and candidate selections are required;
+optional roles are displayed, copied and validated without dropping their
+metadata. A copied release with unavailable features cannot be resubmitted.
+Current cluster training permits timestamp-derived UTC calendar context but not
+session/interaction samples or unlogged request attributes. The runner rejects
+such selections before scheduling a Spark job.
