@@ -6,6 +6,9 @@
 ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/frontend-React-61DAFB?logo=react&logoColor=black)
 
+The console remains Python/React; the JDK 21 migration applies to its Java services and clients,
+not this application. Docker builds the frontend with Node 20; frontend CI uses Node 22.
+
 Management and control plane for OpenRec. The first module owns the lifecycle of versioned recall
 indexes: staging-index creation, document-count validation, atomic active-alias switching, retention,
 version listing, explicit switching, and emergency rollback. Online rec-server instances only read
@@ -87,7 +90,11 @@ diagnostics retain the shared online Redis query path through rec-server in both
 
 The UI is exposed on `http://<host>:8095/`, API documentation is under `/docs`, and `/health`
 checks the dependencies enabled for the selected mode. Cluster checks Elasticsearch, authenticated
-Airflow API access, and rec-server; standalone checks rec-server only.
+Airflow API access, and rec-server; standalone checks rec-server only. rec-server is checked via
+its `/internal/serving-graph` control API, so console health does not prove recommendation readiness. Recommendation
+traffic must wait for rec-server `/ready`. Publishing or rolling back a graph invalidates that
+route's readiness and triggers verification using configured samples; provide representative
+samples for any newly served target/experiment. This also applies to graph changes made here.
 This management port is reachable from the host network; the warning above applies to both modes.
 
 Cluster Compose mounts the Airflow Simple Auth password file read-only, a persistent console
