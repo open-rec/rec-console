@@ -1,5 +1,7 @@
 # OpenRec Console
 
+[Release v0.1.0](RELEASE_NOTES.md) · [Changelog](CHANGELOG.md)
+
 [![CI](https://github.com/open-rec/rec-console/actions/workflows/ci.yml/badge.svg)](https://github.com/open-rec/rec-console/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-20-5FA04E?logo=nodedotjs&logoColor=white)
