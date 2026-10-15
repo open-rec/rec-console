@@ -1,12 +1,23 @@
 """Deployment mode and feature capabilities exposed to the console UI."""
 
 import os
+from pathlib import Path
 
 
 ALL_FEATURES = (
     "recall", "entities", "serving", "dag", "monitor", "analytics", "airflow", "model",
 )
 STANDALONE_FEATURES = ("entities", "serving", "monitor")
+
+
+def data_directory(override=None):
+    """Resolve shared state storage, retaining the legacy environment alias."""
+    return Path(
+        override
+        or os.environ.get("REC_CONSOLE_DATA_DIR")
+        or os.environ.get("REC_CONSOLE_DATA")
+        or "/var/lib/rec-console"
+    )
 
 
 def deployment_mode():

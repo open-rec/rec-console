@@ -1,11 +1,10 @@
 """Elasticsearch recall-index lifecycle management."""
 
-import os
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 from rec_console.release_lock import release_lock
+from rec_console.config import data_directory
 
 
 RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
@@ -19,7 +18,7 @@ class RecallIndexManager:
         self.client = client
         self.prefix = prefix
         self.alias_suffix = alias_suffix
-        self.data_root = Path(data_root or os.environ.get("REC_CONSOLE_DATA", "/var/lib/rec-console"))
+        self.data_root = data_directory(data_root)
 
     def index_name(self, algorithm, business_date, revision="r001"):
         self._algorithm(algorithm)

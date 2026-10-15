@@ -4,10 +4,11 @@ import json
 import os
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import quote
+
+from rec_console.config import data_directory
 
 
 class RecServerError(RuntimeError):
@@ -78,7 +79,7 @@ class ServingGraphStore:
     EXPERIMENT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
     def __init__(self, client=None, data_dir=None):
         self.client = client or RecServerClient()
-        root = Path(data_dir or os.environ.get("REC_CONSOLE_DATA_DIR", "/var/lib/rec-console"))
+        root = data_directory(data_dir)
         self.root = root / "serving_graph"
 
     def current(self, experiment="default"):

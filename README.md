@@ -139,7 +139,8 @@ displayed valid-GMV-order count. Date ranges are limited to 366 days.
 | `AIRFLOW_URL`, `AIRFLOW_USERNAME` | example Airflow service, `admin` | Airflow public API |
 | `AIRFLOW_PASSWORD`, `AIRFLOW_PASSWORD_FILE` | unset | Airflow Simple Auth credential source |
 | `RANK_ENGINE_URL` | `http://rank-engine:8123` | Model activation and rollback |
-| `REC_CONSOLE_DATA_DIR` | `/var/lib/rec-console` | Graph, model, and activation history |
+| `REC_CONSOLE_DATA_DIR` | `/var/lib/rec-console` | Shared graph/DAG/model history and recall/model publication locks |
+| `REC_CONSOLE_DATA` | unset | Legacy fallback when `REC_CONSOLE_DATA_DIR` is unset or empty |
 | `ANALYTICS_CACHE_SECONDS` | `300` | Business-query cache lifetime |
 | `GRAFANA_URL` | `http://grafana:3000` | Embedded monitoring endpoint |
 
@@ -214,8 +215,15 @@ activation. Older unmarked indexes are not automatically trusted: activate them 
 an independently verified `expected_documents` count before using them as rollback targets.
 Published inactive versions are immutable; use a new revision to rebuild them.
 
-Recall mutations and rank-model publish/rollback operations use file locks in `REC_CONSOLE_DATA`
-(default `/var/lib/rec-console`). All console workers must share this data volume. The model lock
+All state stores resolve their directory in this order: explicit constructor override, nonempty
+`REC_CONSOLE_DATA_DIR`, nonempty legacy `REC_CONSOLE_DATA`, then `/var/lib/rec-console`.
+If both environment variables are set, `REC_CONSOLE_DATA_DIR` wins for every store. When upgrading
+a deployment that used separate directories, consolidate retained histories into the chosen
+directory while the console is stopped; changing the variable does not move existing files.
+Mount persistent storage at the selected path in every worker.
+
+Recall mutations and rank-model publish/rollback operations use file locks in this shared data
+directory. All console workers must share this data volume. The model lock
 is per target (`item` or `user`) and spans runtime loading and recording the active release;
 rollback selects its candidate under the same lock. JSON state uses unique temporary files and
 atomic replacement. This serializes concurrent operations; it is not a distributed transaction

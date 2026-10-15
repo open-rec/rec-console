@@ -6,6 +6,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from rec_console.config import data_directory
+
 
 DEFAULT_DAILY_RECALL = {
     "schedule": "0 2 * * *",
@@ -37,8 +39,7 @@ class DagConfigStore:
             raise ValueError("unsupported configurable DAG: %s" % dag_id)
         self.dag_id = dag_id
         self.default = DEFAULTS[dag_id]
-        self.data_dir = Path(data_dir or os.environ.get(
-            "REC_CONSOLE_DATA_DIR", "/var/lib/rec-console"))
+        self.data_dir = data_directory(data_dir)
         self.publish_dir = Path(publish_dir or os.environ.get(
             "DAG_CONFIG_DIR", "/opt/openrec/dag-config"))
 

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from rec_console.release_lock import release_lock
+from rec_console.config import data_directory
 
 
 class ModelReleaseStore:
@@ -19,13 +20,7 @@ class ModelReleaseStore:
             artifact_root
             or os.environ.get("MODEL_ARTIFACT_ROOT", "/models/releases")
         )
-        self.data_root = (
-            Path(
-                data_root
-                or os.environ.get("REC_CONSOLE_DATA", "/var/lib/rec-console")
-            )
-            / "models"
-        )
+        self.data_root = data_directory(data_root) / "models"
         self.rank_url = (
             rank_url
             or os.environ.get("RANK_ENGINE_URL", "http://rank-engine:8123")
