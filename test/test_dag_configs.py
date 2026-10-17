@@ -18,7 +18,7 @@ def test_publish_and_rollback_versioned_daily_config(tmp_path):
     assert rolled_back["version"] == first["version"]
     assert store.current()["config"]["algorithms"] == [
         "hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb",
-        "text_search", "query_title_emb"]
+        "text_search"]
 
 
 @pytest.mark.parametrize("change", [
@@ -46,3 +46,11 @@ def test_user_recall_config_rejects_item_algorithms(tmp_path):
                            "openrec_daily_user_recall")
     with pytest.raises(ValueError):
         store.publish(dict(DEFAULT_DAILY_USER_RECALL, algorithms=["item_cf_i2i"]))
+
+
+def test_title_embeddings_are_opt_in(tmp_path):
+    store = DagConfigStore(tmp_path / "data", tmp_path / "published")
+    assert "query_title_emb" not in store.current()["config"]["algorithms"]
+    config = dict(DEFAULT_DAILY_RECALL, algorithms=["query_title_emb"])
+    store.publish(config)
+    assert store.current()["config"]["algorithms"] == ["query_title_emb"]

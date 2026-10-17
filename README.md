@@ -313,5 +313,6 @@ Title-vector releases use serving table `query-title-emb` and the global alias
 `openrec-recall-query-title-emb-YYYYMMDD-rNNN`. Prepare, activate, rollback and retention
 use the same control-plane APIs as other recall tables. `EMBEDDING_MODEL` and
 `EMBEDDING_DIMENSIONS` must match the offline runner and online query encoder.
-The daily item DAG configuration includes `query_title_emb`; existing published configs
+The daily item DAG excludes `query_title_emb` by default to avoid GPU/vLLM dependencies
+in CI. GPU deployments can explicitly add it; existing published configs
 must add it explicitly. The release UI also lists all three user-similarity tables.
