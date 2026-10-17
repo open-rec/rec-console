@@ -38,7 +38,7 @@ def test_user_recall_config_has_independent_version_and_publish_file(tmp_path):
     assert store.current()["version"] == release["version"]
     published = json.loads((tmp_path / "published" /
                             "openrec_daily_user_recall.json").read_text())
-    assert published["algorithms"] == ["user_cf_u2u", "content_u2u", "user_emb_u2u"]
+    assert published["algorithms"] == ["user_cf_u2u", "content_u2u", "user_als_u2u"]
 
 
 def test_user_recall_config_rejects_item_algorithms(tmp_path):

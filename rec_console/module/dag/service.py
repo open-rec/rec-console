@@ -19,7 +19,7 @@ DEFAULT_DAILY_RECALL = {
 }
 DEFAULT_DAILY_USER_RECALL = {
     "schedule": "30 2 * * *",
-    "algorithms": ["user_cf_u2u", "content_u2u", "user_emb_u2u"],
+    "algorithms": ["user_cf_u2u", "content_u2u", "user_als_u2u"],
     "default_revision": "r001", "max_index_versions": 2,
     "retries": 1, "retry_delay_minutes": 5,
 }
@@ -37,7 +37,7 @@ ALGORITHMS = {
     "openrec_daily_user_recall": (
         "user_cf_u2u",
         "content_u2u",
-        "user_emb_u2u"),
+        "user_als_u2u"),
 }
 
 

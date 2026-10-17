@@ -10,9 +10,9 @@ from rec_console.config import data_directory
 from rec_console.infrastructure.release_lock import release_lock
 
 RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
-                     "user-cf-u2u", "content-u2u", "user-als-emb", "sparse")
+                     "user-cf-u2u", "content-u2u", "user-als-u2u", "sparse")
 I2I_ALGORITHMS = ("item-cf-i2i", "content-i2i")
-U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-als-emb")
+U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-als-u2u")
 
 
 class RecallIndexManager:
