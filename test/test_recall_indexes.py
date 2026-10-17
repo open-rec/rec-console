@@ -58,9 +58,9 @@ def test_prepare_user_recall_creates_u2u_mapping():
     assert set(mapping) == {"scene", "score", "left_user", "right_user"}
 
 
-def test_prepare_sparse_recall_creates_bm25_text_mapping():
+def test_prepare_item_search_recall_creates_bm25_text_mapping():
     subject = manager()
-    subject.prepare("sparse", "2026-08-20", "r002")
+    subject.prepare("item-search", "2026-08-20", "r002")
     mapping = subject.client.indices.create.call_args.kwargs["mappings"]["properties"]
     assert mapping == {
         "scene": {"type": "keyword"},
@@ -170,3 +170,27 @@ def test_legacy_active_is_retained_only_after_validation():
     subject.client.indices.exists.return_value = True
     subject.activate("hot", new, 10)
     assert subject.rollback("hot")["index"] == old
+
+
+def test_user_search_mapping_has_user_entity():
+    mapping = RecallIndexManager._mapping("user-search")
+    assert mapping["properties"]["user"] == {"type": "keyword"}
+    assert "item" not in mapping["properties"]
+    assert mapping["properties"]["text"]["similarity"] == "BM25"
+
+
+def test_title_vector_release_uses_global_alias_and_dense_mapping(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_DIMENSIONS", "1024")
+    subject = manager()
+    prepared = subject.prepare("query-title-emb", "2026-10-17")
+    assert prepared["alias"] == "query-title-emb-index"
+    assert prepared["index"] == "openrec-recall-query-title-emb-20261017-r001"
+    mapping = subject.client.indices.create.call_args.kwargs["mappings"]
+    assert set(mapping["properties"]) == {"id", "vector"}
+    assert mapping["properties"]["vector"] == {
+        "type": "dense_vector", "dims": 1024, "index": True, "similarity": "cosine"}
+    assert mapping["_meta"]["openrec_release"]["embedding_model"] == "Qwen/Qwen3-Embedding-0.6B"
+    subject.client.indices.exists.return_value = True
+    result = subject.activate("query-title-emb", prepared["index"], 10)
+    assert result["alias"] == "query-title-emb-index"
+    assert subject.list_indexes("query-title-emb")["active_indexes"] == [prepared["index"]]

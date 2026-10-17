@@ -11,7 +11,7 @@ from rec_console.config import data_directory
 DEFAULT_DAILY_RECALL = {
     "schedule": "0 2 * * *",
     "algorithms": ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i",
-                   "item_seq_emb", "sparse"],
+                   "item_seq_emb", "text_search", "query_title_emb"],
     "default_revision": "r001",
     "max_index_versions": 2,
     "retries": 1,
@@ -19,7 +19,8 @@ DEFAULT_DAILY_RECALL = {
 }
 DEFAULT_DAILY_USER_RECALL = {
     "schedule": "30 2 * * *",
-    "algorithms": ["user_cf_u2u", "content_u2u", "user_als_u2u"],
+    "algorithms": ["user_cf_u2u", "content_u2u", "user_als_u2u",
+                   "text_search"],
     "default_revision": "r001", "max_index_versions": 2,
     "retries": 1, "retry_delay_minutes": 5,
 }
@@ -33,11 +34,12 @@ ALGORITHMS = {
         "content_i2i",
         "user_cf_u2i",
         "item_seq_emb",
-        "sparse"),
+        "text_search",
+        "query_title_emb"),
     "openrec_daily_user_recall": (
         "user_cf_u2u",
         "content_u2u",
-        "user_als_u2u"),
+        "user_als_u2u", "text_search"),
 }
 
 

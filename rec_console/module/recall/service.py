@@ -10,7 +10,8 @@ from rec_console.config import data_directory
 from rec_console.infrastructure.release_lock import release_lock
 
 RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
-                     "user-cf-u2u", "content-u2u", "user-als-u2u", "sparse")
+                     "user-cf-u2u", "content-u2u", "user-als-u2u",
+                     "item-search", "user-search", "query-title-emb")
 I2I_ALGORITHMS = ("item-cf-i2i", "content-i2i")
 U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-als-u2u")
 
@@ -38,6 +39,8 @@ class RecallIndexManager:
 
     def alias_name(self, algorithm):
         self._algorithm(algorithm)
+        if algorithm == "query-title-emb":
+            return "query-title-emb-index"
         return "%s-%s-%s" % (self.prefix, algorithm, self.alias_suffix)
 
     def prepare(self, algorithm, business_date, revision="r001"):
@@ -267,10 +270,22 @@ class RecallIndexManager:
 
     @staticmethod
     def _mapping(algorithm):
-        if algorithm == "sparse":
+        if algorithm == "query-title-emb":
+            dimensions = int(os.getenv("EMBEDDING_DIMENSIONS", "1024"))
+            if dimensions <= 0:
+                raise ValueError("EMBEDDING_DIMENSIONS must be positive")
+            return {"_meta": {"openrec_release": {
+                "embedding_model": os.getenv(
+                    "EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-0.6B"),
+                "embedding_dimensions": dimensions}}, "properties": {
+                    "id": {"type": "keyword"},
+                    "vector": {"type": "dense_vector", "dims": dimensions,
+                               "index": True, "similarity": "cosine"}}}
+        if algorithm in ("item-search", "user-search"):
             return {"properties": {
                 "scene": {"type": "keyword"},
-                "item": {"type": "keyword"},
+                ("user" if algorithm == "user-search" else "item"): {
+                    "type": "keyword"},
                 "text": {"type": "text", "similarity": "BM25"},
             }}
         properties = {"scene": {"type": "keyword"},

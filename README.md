@@ -19,8 +19,8 @@ structured for recommendation DAG, monitoring, Airflow automation, and rank-mode
 
 > The console can publish serving graphs, recall indexes, workflow configuration, and rank models.
 
-Recall releases include versioned BM25 sparse indexes. The console creates a `text` mapping with
-BM25 similarity and atomically moves the `openrec-recall-sparse-active` alias when a release is
+Recall releases include separate item/user BM25 search indexes. The console creates a `text` mapping with
+BM25 similarity and atomically moves the `openrec-recall-item-search-active` / `openrec-recall-user-search-active` alias when a release is
 activated.
 > Authentication is not implemented yet. The example publishes port 8095 for local evaluation;
 > restrict it to a trusted network and replace the example `SERVING_GRAPH_TOKEN` in shared
@@ -307,3 +307,11 @@ metadata. A copied release with unavailable features cannot be resubmitted.
 Current cluster training permits timestamp-derived UTC calendar context but not
 session/interaction samples or unlogged request attributes. The runner rejects
 such selections before scheduling a Spark job.
+
+Title-vector releases use serving table `query-title-emb` and the global alias
+`query-title-emb-index`; the physical release follows
+`openrec-recall-query-title-emb-YYYYMMDD-rNNN`. Prepare, activate, rollback and retention
+use the same control-plane APIs as other recall tables. `EMBEDDING_MODEL` and
+`EMBEDDING_DIMENSIONS` must match the offline runner and online query encoder.
+The daily item DAG configuration includes `query_title_emb`; existing published configs
+must add it explicitly. The release UI also lists all three user-similarity tables.

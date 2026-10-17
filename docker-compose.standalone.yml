@@ -7,6 +7,8 @@ services:
     hostname: rec-console
     restart: unless-stopped
     environment:
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-0.6B}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
       OPENREC_MODE: standalone
       GRAFANA_URL: http://grafana:3000
       REC_SERVER_URL: http://rec-server:13579

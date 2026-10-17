@@ -3,9 +3,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i" | "sparse";
+type Algorithm = "hot" | "new" | "item-cf-i2i" | "content-i2i" | "user-cf-u2i" | "item-search" | "user-search" | "user-cf-u2u" | "content-u2u" | "user-als-u2u" | "query-title-emb";
 type DailyAlgorithm = "hot" | "new" | "item_cf_i2i" | "content_i2i" | "user_cf_u2i" | "item_seq_emb"
-  | "user_cf_u2u" | "content_u2u" | "user_als_u2u" | "sparse";
+  | "user_cf_u2u" | "content_u2u" | "user_als_u2u" | "text_search" | "query_title_emb";
 type Release = { index: string; active: boolean; published: boolean; documents: number };
 type ReleaseSet = {
   algorithm: Algorithm;
@@ -14,9 +14,9 @@ type ReleaseSet = {
   releases: Release[];
 };
 
-const algorithms: Algorithm[] = ["hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i", "sparse"];
-const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb", "sparse"];
-const dailyUserAlgorithms: DailyAlgorithm[] = ["user_cf_u2u", "content_u2u", "user_als_u2u"];
+const algorithms: Algorithm[] = ["hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i", "item-search", "user-search", "user-cf-u2u", "content-u2u", "user-als-u2u", "query-title-emb"];
+const dailyAlgorithms: DailyAlgorithm[] = ["hot", "new", "item_cf_i2i", "content_i2i", "user_cf_u2i", "item_seq_emb", "text_search", "query_title_emb"];
+const dailyUserAlgorithms: DailyAlgorithm[] = ["user_cf_u2u", "content_u2u", "user_als_u2u", "text_search"];
 const labels: Record<Algorithm | DailyAlgorithm, string> = {
   hot: "热门召回",
   new: "新品召回",
@@ -30,7 +30,14 @@ const labels: Record<Algorithm | DailyAlgorithm, string> = {
   user_cf_u2u: "UserCF U2U 召回",
   content_u2u: "内容 U2U 召回",
   user_als_u2u: "User ALS U2U 召回",
-  sparse: "BM25 稀疏召回",
+  text_search: "BM25 全文检索",
+  query_title_emb: "标题向量召回（vLLM）",
+  "item-search": "Item BM25 全文检索",
+  "user-search": "User BM25 全文检索",
+  "user-cf-u2u": "UserCF U2U",
+  "content-u2u": "Content U2U",
+  "user-als-u2u": "User ALS U2U",
+  "query-title-emb": "全局标题向量索引",
 };
 
 type ModuleKey = "recall" | "entities" | "serving" | "dag" | "monitor" | "analytics" | "airflow" | "model";
