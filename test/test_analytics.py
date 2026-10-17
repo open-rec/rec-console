@@ -2,7 +2,7 @@ import io
 import json
 import urllib.error
 
-from rec_console.analytics import AnalyticsClient, AnalyticsError
+from rec_console.module.analytics.client import AnalyticsClient, AnalyticsError
 
 
 class Response(io.BytesIO):

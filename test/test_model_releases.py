@@ -1,7 +1,7 @@
 import json
 import hashlib
 
-from rec_console.model_releases import ModelReleaseStore
+from rec_console.module.model.releases import ModelReleaseStore
 
 
 class FakeStore(ModelReleaseStore):
@@ -130,7 +130,7 @@ def test_global_rollback_distinguishes_same_version_across_scenes(tmp_path):
 def test_publish_cannot_override_features():
     import pytest
     from pydantic import ValidationError
-    from rec_console.main import ModelPublishRequest
+    from rec_console.module.model.schemas import ModelPublishRequest
 
     with pytest.raises(ValidationError):
         ModelPublishRequest(scene="global", version="v1", feature_selection={})
@@ -218,7 +218,7 @@ def test_rollback_waits_for_publication_before_selecting_previous(tmp_path):
 
 def test_atomic_write_failure_preserves_current_and_removes_temporary(tmp_path, monkeypatch):
     import pytest
-    import rec_console.model_releases as module
+    import rec_console.module.model.releases as module
 
     path = tmp_path / "current.json"
     path.write_text('{"version": "old"}')

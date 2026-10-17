@@ -1,6 +1,6 @@
 import json
 
-from rec_console.entity_queries import EntityQueryClient
+from rec_console.module.entities.client import EntityQueryClient
 
 
 class Response:
@@ -24,7 +24,7 @@ def test_encodes_entity_query_paths(monkeypatch):
         urls.append(request.full_url)
         return Response({"id": "user/a"})
 
-    monkeypatch.setattr("rec_console.entity_queries.urlopen", fake_open)
+    monkeypatch.setattr("rec_console.module.entities.client.urlopen", fake_open)
     client = EntityQueryClient("http://rec-server", timeout=2)
     assert client.user("user/a")["id"] == "user/a"
     client.item("item 1")

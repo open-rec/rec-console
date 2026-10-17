@@ -24,20 +24,30 @@ class EntityQueryClient:
         return self._get("/api/query/item/%s" % quote(item_id, safe=""))
 
     def events(self, user_id, scene, event_type):
-        return self._get("/api/query/event/%s/%s/%s" % (
-            quote(user_id, safe=""), quote(scene, safe=""), quote(event_type, safe="")))
+        return self._get(
+            "/api/query/event/%s/%s/%s" %
+            (quote(
+                user_id, safe=""), quote(
+                scene, safe=""), quote(
+                event_type, safe="")))
 
     def _get(self, path):
         try:
-            request = Request(self.base_url + path, headers={"Accept": "application/json"})
+            request = Request(self.base_url + path,
+                              headers={"Accept": "application/json"})
             with urlopen(request, timeout=self.timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
-            raise EntityQueryError("rec-server query failed: %s" % detail) from error
+            raise EntityQueryError(
+                "rec-server query failed: %s" % detail) from error
         except (URLError, OSError, ValueError) as error:
-            raise EntityQueryError("rec-server query is unavailable: %s" % error) from error
+            raise EntityQueryError(
+                "rec-server query is unavailable: %s" % error) from error
         if not isinstance(result, dict) or not result.get("status"):
-            raise EntityQueryError(result.get("msg", "invalid rec-server query response")
-                                   if isinstance(result, dict) else "invalid rec-server query response")
+            raise EntityQueryError(
+                result.get("msg", "invalid rec-server query response")
+                if isinstance(result, dict)
+                else "invalid rec-server query response"
+            )
         return result.get("data")

@@ -1,6 +1,6 @@
 import pytest
 
-from rec_console.serving_graphs import ServingGraphStore
+from rec_console.module.serving.service import ServingGraphStore
 
 
 GRAPH = {

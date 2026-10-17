@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from rec_console.dag_configs import (DagConfigStore, DEFAULT_DAILY_RECALL,
+from rec_console.module.dag.service import (DagConfigStore, DEFAULT_DAILY_RECALL,
                                      DEFAULT_DAILY_USER_RECALL)
 
 

@@ -5,10 +5,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from rec_console.dag_configs import DagConfigStore
-from rec_console.model_releases import ModelReleaseStore
-from rec_console.recall_indexes import RecallIndexManager
-from rec_console.serving_graphs import ServingGraphStore
+from rec_console.module.dag.service import DagConfigStore
+from rec_console.module.model.releases import ModelReleaseStore
+from rec_console.module.recall.service import RecallIndexManager
+from rec_console.module.serving.service import ServingGraphStore
 
 
 @pytest.mark.parametrize("canonical,legacy,explicit,expected", [

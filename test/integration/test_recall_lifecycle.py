@@ -6,7 +6,7 @@ import uuid
 import pytest
 from elasticsearch import ApiError, Elasticsearch
 
-from rec_console.recall_indexes import RecallIndexManager
+from rec_console.module.recall.service import RecallIndexManager
 
 
 @pytest.mark.skipif(not os.getenv("OPENREC_TEST_ES_URL"), reason="requires Elasticsearch")

@@ -2,7 +2,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from rec_console.recall_indexes import RecallIndexManager
+from rec_console.module.recall.service import RecallIndexManager
 
 
 @pytest.fixture(autouse=True)

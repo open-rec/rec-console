@@ -1,11 +1,13 @@
 """Elasticsearch recall-index lifecycle management."""
 
+import os
 import re
 from datetime import datetime, timezone
 
-from rec_console.release_lock import release_lock
-from rec_console.config import data_directory
+from elasticsearch import Elasticsearch
 
+from rec_console.config import data_directory
+from rec_console.infrastructure.release_lock import release_lock
 
 RECALL_ALGORITHMS = ("hot", "new", "item-cf-i2i", "content-i2i", "user-cf-u2i",
                      "user-cf-u2u", "content-u2u", "user-als-emb", "sparse")
@@ -14,7 +16,12 @@ U2U_ALGORITHMS = ("user-cf-u2u", "content-u2u", "user-als-emb")
 
 
 class RecallIndexManager:
-    def __init__(self, client, prefix="openrec-recall", alias_suffix="active", data_root=None):
+    def __init__(
+            self,
+            client,
+            prefix="openrec-recall",
+            alias_suffix="active",
+            data_root=None):
         self.client = client
         self.prefix = prefix
         self.alias_suffix = alias_suffix
@@ -35,7 +42,9 @@ class RecallIndexManager:
 
     def prepare(self, algorithm, business_date, revision="r001"):
         self._algorithm(algorithm)
-        with release_lock(self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")):
+        with release_lock(
+            self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")
+        ):
             return self._prepare(algorithm, business_date, revision)
 
     def _prepare(self, algorithm, business_date, revision="r001"):
@@ -44,22 +53,48 @@ class RecallIndexManager:
         active = self._alias_indexes(alias)
         if self.client.indices.exists(index=index):
             if index in active or index in self._published(algorithm):
-                return {"index": index, "alias": alias, "writable": False, "idempotent": True}
+                return {
+                    "index": index,
+                    "alias": alias,
+                    "writable": False,
+                    "idempotent": True}
             self.client.indices.delete(index=index)
-        self.client.indices.create(index=index, mappings=self._mapping(algorithm))
-        return {"index": index, "alias": alias, "writable": True, "idempotent": False}
+        self.client.indices.create(
+            index=index, mappings=self._mapping(algorithm))
+        return {
+            "index": index,
+            "alias": alias,
+            "writable": True,
+            "idempotent": False}
 
-    def activate(self, algorithm, index, expected_documents, max_index_versions=2):
+    def activate(
+            self,
+            algorithm,
+            index,
+            expected_documents,
+            max_index_versions=2):
         self._algorithm(algorithm)
-        with release_lock(self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")):
-            return self._activate(algorithm, index, expected_documents, max_index_versions)
+        with release_lock(
+            self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")
+        ):
+            return self._activate(
+                algorithm,
+                index,
+                expected_documents,
+                max_index_versions)
 
-    def _activate(self, algorithm, index, expected_documents, max_index_versions=2):
+    def _activate(
+            self,
+            algorithm,
+            index,
+            expected_documents,
+            max_index_versions=2):
         self._validate_index(algorithm, index)
         if expected_documents <= 0:
             raise ValueError("expected_documents must be positive")
         if max_index_versions < 2:
-            raise ValueError("max_index_versions must be at least 2 to support rollback")
+            raise ValueError(
+                "max_index_versions must be at least 2 to support rollback")
         if not self.client.indices.exists(index=index):
             raise ValueError("recall index does not exist: %s" % index)
         actual = self._validate_documents(index, expected_documents)
@@ -71,7 +106,9 @@ class RecallIndexManager:
 
     def rollback(self, algorithm, target_index=None):
         self._algorithm(algorithm)
-        with release_lock(self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")):
+        with release_lock(
+            self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")
+        ):
             return self._rollback(algorithm, target_index)
 
     def _rollback(self, algorithm, target_index=None):
@@ -88,34 +125,49 @@ class RecallIndexManager:
 
     def switch(self, algorithm, target_index):
         self._algorithm(algorithm)
-        with release_lock(self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")):
+        with release_lock(
+            self.data_root / "recall" / (self.alias_name(algorithm) + ".lock")
+        ):
             return self._switch(algorithm, target_index)
 
     def _switch(self, algorithm, target_index):
         self._validate_index(algorithm, target_index)
         indexes = self._published(algorithm)
         if target_index not in indexes:
-            raise ValueError("switch target is not retained: %s" % target_index)
+            raise ValueError(
+                "switch target is not retained: %s" % target_index)
         alias = self.alias_name(algorithm)
         self._validate_release(target_index)
         previous = self._switch_alias(alias, target_index)
-        return {"index": target_index, "alias": alias, "previous_indexes": previous}
+        return {
+            "index": target_index,
+            "alias": alias,
+            "previous_indexes": previous}
 
     def list_indexes(self, algorithm):
         indexes = self._indexes(algorithm)
         active = self._alias_indexes(self.alias_name(algorithm))
         published = self._published(algorithm)
-        releases = [{"index": index, "active": index in active, "published": index in published,
-                     "documents": self.client.count(index=index)["count"]}
-                    for index in indexes]
-        return {"algorithm": algorithm, "active_indexes": active, "indexes": indexes,
-                "releases": releases}
+        releases = [
+            {
+                "index": index,
+                "active": index in active,
+                "published": index in published,
+                "documents": self.client.count(
+                    index=index)["count"]} for index in indexes]
+        return {
+            "algorithm": algorithm,
+            "active_indexes": active,
+            "indexes": indexes,
+            "releases": releases}
 
     def _switch_alias(self, alias, index):
         old_indexes = self._alias_indexes(alias)
-        actions = [{"remove": {"index": old, "alias": alias}} for old in old_indexes]
-        # The retained marker and serving alias change in the same ES transaction.
-        # A validated staging index is not eligible until this transaction succeeds.
+        actions = [{"remove": {"index": old, "alias": alias}}
+                   for old in old_indexes]
+        # The retained marker and serving alias change in one ES transaction.
+        # A validated staging index is not eligible until this transaction
+        # succeeds.
         for retained in set(old_indexes + [index]):
             metadata = self._release_metadata(retained)
             if not metadata:
@@ -123,16 +175,22 @@ class RecallIndexManager:
                 self._validate_documents(retained, count)
             if retained == index:
                 metadata = self._release_metadata(retained)
-                metadata["activated_at"] = datetime.now(timezone.utc).isoformat()
-                self.client.indices.put_mapping(index=retained, body={"_meta": {"openrec_release": metadata}})
-            actions.append({"add": {"index": retained, "alias": alias + "-published"}})
+                metadata["activated_at"] = datetime.now(
+                    timezone.utc).isoformat()
+                self.client.indices.put_mapping(
+                    index=retained, body={
+                        "_meta": {
+                            "openrec_release": metadata}})
+            actions.append(
+                {"add": {"index": retained, "alias": alias + "-published"}})
         actions.append({"add": {"index": index, "alias": alias}})
         self.client.indices.update_aliases(actions=actions)
         return old_indexes
 
     def _cleanup(self, algorithm, active_index, maximum, previous):
         indexes = self._published(algorithm)
-        retained = list(dict.fromkeys([active_index] + previous + indexes))[:maximum]
+        retained = list(dict.fromkeys(
+            [active_index] + previous + indexes))[:maximum]
         deleted = []
         for index in indexes:
             if index not in retained:
@@ -141,26 +199,37 @@ class RecallIndexManager:
         return deleted
 
     def _release_metadata(self, index):
-        mapping = self.client.indices.get_mapping(index=index)[index]["mappings"]
+        mapping = self.client.indices.get_mapping(index=index)[
+            index]["mappings"]
         return dict(mapping.get("_meta", {}).get("openrec_release", {}))
 
     def _published(self, algorithm):
-        indexes = self._alias_indexes(self.alias_name(algorithm) + "-published")
-        return sorted(indexes, key=lambda index: (
-            self._release_metadata(index).get("activated_at", ""), index), reverse=True)
+        indexes = self._alias_indexes(
+            self.alias_name(algorithm) + "-published")
+        return sorted(
+            indexes,
+            key=lambda index: (
+                self._release_metadata(index).get(
+                    "activated_at",
+                    ""),
+                index),
+            reverse=True)
 
     def _validate_documents(self, index, expected):
         if expected <= 0:
             raise ValueError("refusing to activate an empty recall index")
-        # add_block waits for in-flight writes before validating the immutable release.
+        # add_block waits for in-flight writes before validating the immutable
+        # release.
         self.client.indices.add_block(index=index, block="write")
         self.client.indices.refresh(index=index)
         actual = self.client.count(index=index)["count"]
         if actual != expected:
-            raise ValueError("%s expected %d documents, got %d" % (index, expected, actual))
+            raise ValueError("%s expected %d documents, got %d" %
+                             (index, expected, actual))
         metadata = self._release_metadata(index)
         metadata["expected_documents"] = expected
-        self.client.indices.put_mapping(index=index, body={"_meta": {"openrec_release": metadata}})
+        self.client.indices.put_mapping(
+            index=index, body={"_meta": {"openrec_release": metadata}})
         return actual
 
     def _validate_release(self, index):
@@ -181,14 +250,20 @@ class RecallIndexManager:
 
     def _validate_index(self, algorithm, index):
         self._algorithm(algorithm)
-        if not re.match(r"^%s-%s-\d{8}-r\d{3,}$" %
-                        (re.escape(self.prefix), re.escape(algorithm)), index or ""):
-            raise ValueError("invalid %s recall index: %s" % (algorithm, index))
+        if not re.match(
+                r"^%s-%s-\d{8}-r\d{3,}$" %
+                (re.escape(
+                    self.prefix),
+                    re.escape(algorithm)),
+                index or ""):
+            raise ValueError("invalid %s recall index: %s" %
+                             (algorithm, index))
 
     @staticmethod
     def _algorithm(algorithm):
         if algorithm not in RECALL_ALGORITHMS:
-            raise ValueError("unsupported recall serving table: %s" % algorithm)
+            raise ValueError(
+                "unsupported recall serving table: %s" % algorithm)
 
     @staticmethod
     def _mapping(algorithm):
@@ -198,7 +273,8 @@ class RecallIndexManager:
                 "item": {"type": "keyword"},
                 "text": {"type": "text", "similarity": "BM25"},
             }}
-        properties = {"scene": {"type": "keyword"}, "score": {"type": "double"}}
+        properties = {"scene": {"type": "keyword"},
+                      "score": {"type": "double"}}
         if algorithm in I2I_ALGORITHMS:
             properties.update({"left_item": {"type": "keyword"},
                                "right_item": {"type": "keyword"}})
@@ -213,3 +289,16 @@ class RecallIndexManager:
             if algorithm == "new":
                 properties["publish_time"] = {"type": "long"}
         return {"properties": properties}
+
+
+def create_manager():
+    verify = os.environ.get("ES_VERIFY_CERTS", "false").lower() == "true"
+    client = Elasticsearch(
+        [os.environ.get("ES_HOST", "https://elasticsearch:9200")],
+        basic_auth=(
+            os.environ.get("ES_USER", "elastic"),
+            os.environ.get("ES_PASSWORD", "openrec-es-password"),
+        ),
+        verify_certs=verify,
+    )
+    return RecallIndexManager(client)

@@ -147,6 +147,36 @@ displayed valid-GMV-order count. Date ranges are limited to 366 days.
 Compose files define the remaining artifact and DAG-publication paths. Do not enable certificate
 verification until the configured CA is available inside the container.
 
+## Backend layout
+
+`rec_console/main.py` assembles the FastAPI application, registers routers and
+middleware, and mounts the frontend. The `rec_console.main:app` entry point remains
+unchanged.
+
+```text
+rec_console/
+├── main.py
+├── module/
+│   ├── recall/       # Recall index preparation, activation and rollback
+│   ├── entities/     # Online entity diagnostics
+│   ├── serving/      # Serving graphs, routing and experiments
+│   ├── dag/          # Versioned offline DAG configuration
+│   ├── monitor/      # Dependency health and Grafana proxy
+│   ├── analytics/    # Business analytics queries
+│   ├── airflow/      # DAG execution, task state and logs
+│   └── model/        # Features, training and model releases
+├── config/           # Settings, capabilities, middleware and shared config schemas
+└── infrastructure/   # Shared Airflow client and publication lock
+```
+
+Each business module owns its `router.py` and, where needed, `schemas.py`.
+Implementation files follow the module's responsibilities: small modules use a
+client or service, while model management separates training from releases.
+Airflow management reads configuration through the DAG service; monitoring uses
+module services for dependency checks. Shared packages must not import business
+modules. Add common helpers only when there is an actual shared responsibility.
+Tests import implementations from their owning packages.
+
 ## Development and test
 
 Run backend tests from the repository root; they use fakes and temporary directories rather than a
@@ -156,6 +186,38 @@ live cluster:
 python -m pip install -r requirements.txt pytest
 python -m pytest -q test
 ```
+
+Backend application Python files (`rec_console/**/*.py`) use a 79-character
+line limit and import ordering defined in `setup.cfg`. Install development tools
+and Git hooks once per clone (Python 3.12 or later):
+
+```shell
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-style.txt
+make install-hooks
+```
+
+Both `pre-commit` and `pre-push` reject application Python changes that fail
+isort, autopep8 or pycodestyle checks. Pre-commit checks staged content, including
+partially staged files; it does not automatically stage or rewrite changes.
+To format the application or check all files manually:
+
+```shell
+make format
+make lint
+```
+
+Review and stage formatting changes before retrying a rejected commit. Hooks use
+isolated environments with pinned tool versions. Keep the `.venv` used to install
+pre-commit; reinstall hooks if that environment moves. New clones must install
+the hooks themselves because Git does not distribute installed hooks.
+
+The CI `Python style` job runs the same checks over all application Python files
+on pull requests and pushes to `master` and `release/**`. Configure this check as
+required in the remote branch protection/ruleset to block noncompliant merges.
+Local hooks can be bypassed; CI reports failures after a push and cannot reject
+the push itself. Frontend checks remain in the separate frontend build job.
 
 Build or run the React/TypeScript frontend separately:
 

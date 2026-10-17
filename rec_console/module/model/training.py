@@ -5,7 +5,7 @@ import os
 import urllib.error
 import urllib.request
 
-from rec_console.airflow_client import AirflowClient
+from rec_console.infrastructure.airflow_client import AirflowClient
 
 
 class ModelTraining:

@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from rec_console.airflow_client import AirflowClient
+from rec_console.infrastructure.airflow_client import AirflowClient
 
 
 class Response:

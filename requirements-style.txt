@@ -1,0 +1,4 @@
+autopep8==2.3.2
+isort==9.0.2
+pre-commit==4.3.0
+pycodestyle==2.15.0

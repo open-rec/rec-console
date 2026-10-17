@@ -1,11 +1,11 @@
 """Small authenticated client for the Airflow 3 public REST API."""
 
 import json
-from datetime import datetime, timezone
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 
 
 class AirflowError(RuntimeError):

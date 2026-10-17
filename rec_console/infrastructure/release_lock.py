@@ -1,4 +1,4 @@
-"""Serialize release mutations across threads and workers sharing the data volume."""
+"""Serialize release mutations for threads and workers sharing storage."""
 
 import fcntl
 from contextlib import contextmanager

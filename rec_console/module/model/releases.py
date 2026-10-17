@@ -10,8 +10,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from rec_console.release_lock import release_lock
 from rec_console.config import data_directory
+from rec_console.infrastructure.release_lock import release_lock
 
 
 class ModelReleaseStore:
@@ -280,7 +280,9 @@ class ModelReleaseStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
-            with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+            with tempfile.NamedTemporaryFile(
+                mode="w", dir=path.parent, delete=False
+            ) as stream:
                 temporary = Path(stream.name)
                 json.dump(value, stream, indent=2, sort_keys=True)
                 stream.flush()

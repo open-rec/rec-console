@@ -5,8 +5,8 @@ import os
 import re
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from rec_console.config import data_directory
 
@@ -28,16 +28,24 @@ class RecServerClient:
         return self._request("GET", "/internal/serving-graph" + suffix)
 
     def activate(self, graph, version, experiment="default"):
-        return self._request("POST", "/internal/serving-graph", graph, version, experiment)
+        return self._request(
+            "POST",
+            "/internal/serving-graph",
+            graph,
+            version,
+            experiment)
 
     def configure_routing(self, routing):
         return self._request("PUT", "/internal/serving-graph/routing", routing)
 
     def create_experiment(self, name):
-        return self._request("POST", "/internal/serving-graph/experiments", {"name": name})
+        return self._request("POST",
+                             "/internal/serving-graph/experiments",
+                             {"name": name})
 
     def set_experiment_enabled(self, name, enabled):
-        path = "/internal/serving-graph/experiments/%s/enabled" % quote(name, safe="")
+        path = "/internal/serving-graph/experiments/%s/enabled" % quote(
+            name, safe="")
         return self._request("PUT", path, {"enabled": enabled})
 
     def delete_experiment(self, name):
@@ -54,7 +62,8 @@ class RecServerClient:
             if experiment:
                 headers["X-Ab-Experiment"] = experiment
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-        request = Request(self.base_url + path, data=data, headers=headers, method=method)
+        request = Request(self.base_url + path, data=data,
+                          headers=headers, method=method)
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -65,33 +74,42 @@ class RecServerClient:
                 detail = parsed.get("message") or parsed.get("error") or detail
             except ValueError:
                 pass
-            raise RecServerError("rec-server rejected serving graph: %s" % detail) from error
+            raise RecServerError(
+                "rec-server rejected serving graph: %s" % detail) from error
         except (URLError, OSError, ValueError) as error:
-            raise RecServerError("rec-server serving graph is unavailable: %s" % error) from error
+            raise RecServerError(
+                "rec-server serving graph is unavailable: %s" %
+                error) from error
         if isinstance(result, dict) and "status" in result:
             if not result.get("status"):
-                raise RecServerError(result.get("msg") or "rec-server rejected serving graph")
+                raise RecServerError(result.get(
+                    "msg") or "rec-server rejected serving graph")
             return result.get("data")
         return result
 
 
 class ServingGraphStore:
     EXPERIMENT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+
     def __init__(self, client=None, data_dir=None):
         self.client = client or RecServerClient()
         root = data_directory(data_dir)
         self.root = root / "serving_graph"
 
     def current(self, experiment="default"):
-        runtime = self.client.current(None if experiment == "default" else experiment)
-        overview = runtime if experiment == "default" else self.client.current()
+        runtime = self.client.current(
+            None if experiment == "default" else experiment)
+        overview = (
+            runtime if experiment == "default" else self.client.current()
+        )
         experiment_root = self._experiment_root(experiment)
         current_path = experiment_root / "current.json"
         current = self._read(current_path) if current_path.exists() else {}
         if not current and runtime.get("graph"):
             current = {
                 "version": runtime.get("version") or "classpath-default",
-                "published_at": runtime.get("loadedAt") or datetime.now(timezone.utc).isoformat(),
+                "published_at": runtime.get("loadedAt") or datetime.now(
+                    timezone.utc).isoformat(),
                 "checksum": runtime.get("checksum"),
                 "graph": runtime["graph"],
             }
@@ -126,26 +144,38 @@ class ServingGraphStore:
         if enabled and experiment != "default":
             overview = self.client.current()
             if experiment not in (overview.get("experiments") or {}):
-                current_path = self._experiment_root(experiment) / "current.json"
+                current_path = self._experiment_root(
+                    experiment) / "current.json"
                 if not current_path.exists():
-                    raise ValueError("experiment does not exist in runtime or console history: %s" % experiment)
+                    raise ValueError(
+                        "experiment does not exist in runtime "
+                        "or console history: %s" % experiment
+                    )
                 release = self._read(current_path)
                 if release.get("version") in (None, "draft"):
-                    raise ValueError("experiment graph must be published before enabling: %s" % experiment)
+                    raise ValueError(
+                        "experiment graph must be published before "
+                        "enabling: %s" % experiment
+                    )
                 self.client.create_experiment(experiment)
-                self.client.activate(release["graph"], release["version"], experiment)
+                self.client.activate(
+                    release["graph"], release["version"], experiment)
         return self.client.set_experiment_enabled(experiment, enabled)
 
     def rollback(self, version=None, experiment="default"):
         experiment_root = self._experiment_root(experiment)
-        current = self._read(experiment_root / "current.json") if (experiment_root / "current.json").exists() else {}
-        candidates = [item for item in self.history(experiment) if item["version"] != current.get("version")]
+        current = self._read(experiment_root / "current.json") if (
+            experiment_root / "current.json").exists() else {}
+        candidates = [item for item in self.history(
+            experiment) if item["version"] != current.get("version")]
         target = version or (candidates[0]["version"] if candidates else None)
         path = experiment_root / "history" / (str(target) + ".json")
         if not target or not path.exists():
-            raise ValueError("serving graph rollback target is not retained: %s" % target)
+            raise ValueError(
+                "serving graph rollback target is not retained: %s" % target)
         release = self._read(path)
-        runtime = self.client.activate(release["graph"], release["version"], experiment)
+        runtime = self.client.activate(
+            release["graph"], release["version"], experiment)
         if runtime:
             release["checksum"] = runtime.get("checksum")
         release["published_at"] = datetime.now(timezone.utc).isoformat()
@@ -157,11 +187,16 @@ class ServingGraphStore:
         directory = self._experiment_root(experiment) / "history"
         if not directory.exists():
             return []
-        return [self._read(path) for path in sorted(directory.glob("*.json"), reverse=True)[:20]]
+        return [
+            self._read(path) for path in sorted(
+                directory.glob("*.json"),
+                reverse=True)[
+                :20]]
 
     def _persist(self, release, experiment="default"):
         experiment_root = self._experiment_root(experiment)
-        self._write(experiment_root / "history" / (release["version"] + ".json"), release)
+        self._write(experiment_root / "history" /
+                    (release["version"] + ".json"), release)
         self._write(experiment_root / "current.json", release)
 
     def _experiment_root(self, experiment):
@@ -169,7 +204,10 @@ class ServingGraphStore:
             return self.root
         safe = str(experiment).strip()
         if not self.EXPERIMENT_NAME.fullmatch(safe):
-            raise ValueError("experiment name must start with a letter and contain only letters, numbers and underscores")
+            raise ValueError(
+                "experiment name must start with a letter and contain only "
+                "letters, numbers and underscores"
+            )
         return self.root / "experiments" / safe
 
     @staticmethod
@@ -182,17 +220,28 @@ class ServingGraphStore:
         if not isinstance(edges, list) or not edges:
             raise ValueError("serving graph edges must be a non-empty array")
         names = [node.get("name") for node in nodes if isinstance(node, dict)]
-        if len(names) != len(nodes) or any(not name for name in names) or len(set(names)) != len(names):
-            raise ValueError("serving graph node names must be present and unique")
+        if len(names) != len(nodes) or any(
+                not name for name in names) or len(
+                set(names)) != len(names):
+            raise ValueError(
+                "serving graph node names must be present and unique")
         for node in nodes:
             if not node.get("clazz") or not isinstance(node.get("open"), bool):
-                raise ValueError("each serving graph node requires clazz and boolean open")
-            if not isinstance(node.get("timeout"), int) or node["timeout"] <= 0:
-                raise ValueError("each serving graph node timeout must be a positive integer")
+                raise ValueError(
+                    "each serving graph node requires clazz and boolean open")
+            if not isinstance(
+                    node.get("timeout"),
+                    int) or node["timeout"] <= 0:
+                raise ValueError(
+                    "each serving graph node timeout must be "
+                    "a positive integer"
+                )
         known = set(names)
         for edge in edges:
-            if not isinstance(edge, dict) or edge.get("from") not in known or edge.get("to") not in known:
-                raise ValueError("each serving graph edge must reference existing nodes")
+            if not isinstance(edge, dict) or edge.get(
+                    "from") not in known or edge.get("to") not in known:
+                raise ValueError(
+                    "each serving graph edge must reference existing nodes")
         return graph
 
     @staticmethod

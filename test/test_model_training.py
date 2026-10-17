@@ -1,7 +1,7 @@
 import pytest
 
-from rec_console.model_training import ModelTraining
-from rec_console.main import ModelTrainingRequest
+from rec_console.module.model.training import ModelTraining
+from rec_console.module.model.schemas import ModelTrainingRequest
 
 
 def test_training_validates_and_forwards_selection_without_publishing(
@@ -22,14 +22,14 @@ def test_training_validates_and_forwards_selection_without_publishing(
 
     monkeypatch.setattr(ModelTraining, "algorithm_request", validate)
     monkeypatch.setattr(
-        "rec_console.model_training.AirflowClient.trigger",
+        "rec_console.module.model.training.AirflowClient.trigger",
         lambda self, dag, conf: (
             calls.append((dag, conf)) or {"state": "queued"}
         ),
     )
     resumed = []
     monkeypatch.setattr(
-        "rec_console.model_training.AirflowClient.update_dag",
+        "rec_console.module.model.training.AirflowClient.update_dag",
         lambda self, dag, paused: resumed.append((dag, paused)),
     )
     result = ModelTraining().submit(request.model_dump(mode="json"))
@@ -47,7 +47,7 @@ def test_training_validation_failure_does_not_trigger_airflow(monkeypatch):
 
     monkeypatch.setattr(ModelTraining, "algorithm_request", reject)
     monkeypatch.setattr(
-        "rec_console.model_training.AirflowClient.trigger",
+        "rec_console.module.model.training.AirflowClient.trigger",
         lambda *args: pytest.fail("must not trigger"),
     )
     with pytest.raises(ValueError):
