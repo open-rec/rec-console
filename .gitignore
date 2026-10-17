@@ -220,4 +220,6 @@ __marimo__/
 # Frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/
-frontend/*.tsbuildinfo
+frontend/**/*.tsbuildinfo
+frontend/.vite/
+frontend/.vite-temp/
