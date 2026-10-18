@@ -1,25 +1,21 @@
-# rec-console v0.1.0
+# rec-console v0.2.0
 
-Released: 2026-10-05
+Released: 2026-10-18
 
-Recommendation control plane. First coordinated OpenRec source release.
+Part of the coordinated OpenRec v0.2.0 source release.
 
-## Features
+## Changes since v0.1.0
 
-- React/TypeScript UI and FastAPI APIs for runtime serving graphs, experiment variants and rollback.
-- Versioned recall-index preparation, validation, atomic alias activation, retention and rollback, including BM25 indexes.
-- Airflow DAG control and versioned offline job configuration.
-- Selected-feature model training, evaluation-gated publication, checksums, retained releases and explicit rollback.
-- Entity diagnostics, business analytics, dependency monitoring and embedded Grafana dashboards.
+- Refactor control-plane modules and unify console state-directory configuration.
+- Align ALS/text-search publication and manage scheduled title embedding releases.
+- Keep online query encoding and scheduled title generation opt-in for CPU-only deployments.
 
 ## Installation and compatibility
 
-Standalone exposes monitoring, entity diagnostics and serving-graph operations. Cluster enables the offline, recall and model lifecycle modules.
+Standalone retains monitoring, entity diagnostics and serving graphs; cluster enables the full control plane. Republish persisted DAG configurations when migrating recall names and task IDs. Authentication/RBAC is not implemented; retain the documented trusted-environment deployment boundary.
 
-Authentication/RBAC is not implemented. Run the console only in a trusted environment and protect access to its mutation APIs. Replace example tokens before sharing a deployment. Release mutations use locks on the shared data volume; this does not establish a general distributed HA control plane.
+See the [distribution upgrade and rollback instructions](https://github.com/open-rec/openrec/blob/v0.2.0/RELEASE_NOTES.md) for the complete compatible component set and persisted configuration migrations.
 
-## Validation and known boundaries
+## Validation and publication
 
-See this repository's README for build/test commands and deployment requirements. The coordinated release's [validation record](https://github.com/open-rec/openrec/blob/v0.1.0/release/VALIDATION.md) distinguishes checks executed for this release from historical integration evidence.
-
-This initial release establishes a versioned source baseline. Source archives and checksums are published; external package registries and container registries are not populated by the source-release workflow. Upgrade the complete compatible distribution, retain data/checkpoints/artifacts, and preserve prior component refs for rollback.
+The [validation record](https://github.com/open-rec/openrec/blob/v0.2.0/release/VALIDATION.md) distinguishes release checks from maintainer-reported prior CI and integration results. GitHub Actions publishes source archives and SHA-256 checksums; Maven Central, PyPI and versioned container registries are not populated by this workflow.

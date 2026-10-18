@@ -16,7 +16,7 @@ from rec_console.module.monitor.router import router as monitor_router
 from rec_console.module.recall.router import router as recall_router
 from rec_console.module.serving.router import router as serving_router
 
-app = FastAPI(title="OpenRec Console", version="0.1.0")
+app = FastAPI(title="OpenRec Console", version="0.2.0")
 app.middleware("http")(reject_disabled_features)
 
 for router in (
